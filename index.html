@@ -287,7 +287,7 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
 .modal-close{width:32px;height:32px;border-radius:9px;display:grid;place-items:center;color:var(--faint)}
 .modal-close:hover{background:var(--vidrio);color:var(--texto)}
 .modal-body{padding:24px}
-.modal-foot{display:flex;justify-content:flex-end;gap:10px;padding:18px 24px;border-top:1px solid var(--linea);position:sticky;bottom:0;background:var(--panel)}
+.modal-foot{display:flex;flex-wrap:wrap;justify-content:flex-end;gap:10px;padding:18px 24px;border-top:1px solid var(--linea);position:sticky;bottom:0;background:var(--panel)}
 
 /* ---------- toasts ---------- */
 #toastRoot{position:fixed;bottom:24px;right:24px;z-index:200;display:flex;flex-direction:column;gap:10px}
@@ -302,6 +302,29 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
 .mini-note{font-size:12px;color:var(--faint);background:var(--vidrio);border:1px solid var(--linea);border-radius:10px;padding:10px 13px;line-height:1.6}
 .line-item{display:grid;grid-template-columns:1fr 1fr auto auto auto;gap:10px;align-items:end;padding:12px;border:1px solid var(--linea);border-radius:12px;margin-bottom:10px;background:var(--panel-2)}
 .readonly-flag{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:12px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);color:var(--otra-lt);font-size:13px;margin-bottom:18px}
+
+.etiqueta-wrap{width:101.6mm;margin:0 auto;padding:16px 18px;background:#fff;border:1px solid var(--linea-strong);border-radius:14px;box-shadow:var(--sh)}
+.etq-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+.etq-brand{display:flex;align-items:center;gap:6px;font-family:var(--fmono);font-size:10.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint);font-weight:600}
+.etq-brand svg{width:14px;height:14px}
+.etq-lote{font-family:var(--fmono);font-size:26px;font-weight:700;color:var(--texto);letter-spacing:-.01em;line-height:1.15}
+.etq-variedad{font-size:14px;color:var(--mute);margin-bottom:14px}
+.etq-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px;padding:14px 0;border-top:1px dashed var(--linea-strong);border-bottom:1px dashed var(--linea-strong)}
+.etq-kv{display:flex;flex-direction:column;gap:2px}
+.etq-lab{font-size:9.5px;text-transform:uppercase;letter-spacing:.07em;color:var(--faint);font-weight:600}
+.etq-val{font-size:13px;color:var(--texto);font-weight:600}
+.etq-qr-wrap{display:flex;align-items:center;gap:14px;padding-top:14px}
+.etq-qr-box{width:150px;height:150px;flex:none;display:flex;align-items:center;justify-content:center;background:#fff}
+.etq-qr-hint{font-size:11px;color:var(--faint);line-height:1.5}
+.etq-qr-error{width:150px;font-size:10.5px;color:var(--bad-lt);line-height:1.4}
+.etq-foot{margin-top:14px;text-align:center;font-size:9.5px;color:var(--faint);font-family:var(--fmono)}
+
+@page{size:101.6mm 152.4mm;margin:6mm}
+@media print{
+  body *{visibility:hidden}
+  #etiquetaPrintArea,#etiquetaPrintArea *{visibility:visible}
+  #etiquetaPrintArea{position:fixed;top:0;left:0;width:auto;margin:0;box-shadow:none;border:none;border-radius:0}
+}
 
 @media(max-width:980px){
   .shell{grid-template-columns:1fr}
@@ -341,8 +364,8 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
       </span> Almacén Leguminosas del Alba</div>
     <div class="brand-hero">
       <div class="eyebrow">Control de inventario de semillas</div>
-      <h1>Gestion Inteligente de Semillas.</h1>
-      <p>Recepción, Secado, prueba de germinaciòn y despacho de semillas - todo bajo un estricto control digital y con respaldo historico en cada movimiento>
+      <h1>Trazabilidad impecable, de la cosecha al saco.</h1>
+      <p>Recepción, secado y limpieza, pruebas de germinación y despacho de maíz, caraota, sorgo y soya — todo en un solo sistema, con respaldo de cada movimiento.</p>
     </div>
     <div class="brand-stats">
       <div class="s"><b id="ls1">—</b><span>Lotes activos</span></div>
@@ -402,13 +425,14 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.8.2/jspdf.plugin.autotable.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
 <script>
 /* ===================================================================
    ALMACÉN LEGUMINOSAS DEL ALBA — lógica de la aplicación
    =================================================================== */
 /* ======================= CONFIGURACIÓN ======================= */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbwS3S58DlHegYkw5zC8pgIAy2UY2Rlibpb-q7pRzVrTKHBOT61HahcprbQEpJ8LMvEQ/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
+  API_URL: '',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
   ALMACEN_NOMBRE: 'Almacén Leguminosas del Alba',
   GERMINACION_UMBRAL_APTO: 80,
   GERMINACION_DIAS_PROXIMA: 30,
@@ -449,7 +473,8 @@ const ICONS = {
   lock:'<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
   seedling:'<path d="M12 22v-8"/><path d="M12 2c0 5.5-4 6-4 10a4 4 0 0 0 8 0c0-4-4-4.5-4-10Z"/>',
   scale:'<path d="M16 6h3.376a1 1 0 0 1 .935 1.35l-2.588 6.909M8 6H4.624a1 1 0 0 0-.936 1.35l2.588 6.909"/><path d="M12 2v20M6 12h12M9 22h6"/><path d="M4.6 14.55a2 2 0 0 0 1.9 2.45h3a2 2 0 0 0 1.9-2.45l-1.7-6.11a1 1 0 0 0-1.9 0l-1.7 6.11ZM16.6 14.55a2 2 0 0 0 1.9 2.45h3a2 2 0 0 0 1.9-2.45l-1.7-6.11a1 1 0 0 0-1.9 0l-1.7 6.11Z"/>',
-  refresh:'<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>'
+  refresh:'<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M16 16h5v5"/>',
+  qrcode:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><path d="M14 14h3v3h-3z"/><path d="M18 18h3v3h-3z"/><path d="M14 19.5h1.5"/><path d="M19.5 14h1.5"/>'
 };
 function ic(name, cls){ return `<svg class="ic ${cls||''}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${ICONS[name]||''}</svg>`; }
 
@@ -1170,15 +1195,102 @@ function abrirPasaporte(id){
     </div>
     <div class="modal-body" style="padding:0"><div class="timeline">${stepsHtml||'<div class="tl-empty">Sin eventos registrados.</div>'}</div></div>
     <div class="modal-foot">
+      <button class="btn btn-outline" id="ppEtiqueta">${ic('qrcode')} Imprimir etiqueta</button>
       ${canWrite()&&lote.Tipo_Semilla==='Caraota'?`<button class="btn btn-ghost" id="ppSecado">${ic('droplet')} Registrar secado</button>`:''}
       ${canWrite()?`<button class="btn btn-ghost" id="ppGerm">${ic('sprout')} Registrar germinación</button>`:''}
       ${canWrite()?`<button class="btn btn-ghost" id="ppAjuste">${ic('shuffle')} Ajuste / devolución</button>`:''}
       <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
     </div>`;
   openModal(html,{wide:true});
+  if($('#ppEtiqueta')) $('#ppEtiqueta').onclick=()=>abrirEtiquetaLote(lote.ID_Lote);
   if($('#ppSecado')) $('#ppSecado').onclick=()=>{ closeModal(); setView('secado'); S.sub.loteId=lote.ID_Lote; renderView(); };
   if($('#ppGerm')) $('#ppGerm').onclick=()=>{ closeModal(); abrirModalGerminacion(lote.ID_Lote); };
   if($('#ppAjuste')) $('#ppAjuste').onclick=()=>{ closeModal(); abrirModalAjuste(lote.ID_Lote); };
+}
+/* ======================= ETIQUETA DE LOTE (impresión + QR) ======================= */
+function kvEtq(lab,val){ return `<div class="etq-kv"><span class="etq-lab">${esc(lab)}</span><span class="etq-val">${esc(val)}</span></div>`; }
+
+function loteQRText(lote){
+  const L=[];
+  L.push('ALMACÉN LEGUMINOSAS DEL ALBA');
+  L.push('Lote: '+lote.ID_Lote);
+  L.push('Tipo: '+lote.Tipo_Semilla+(lote.Variedad?' · Variedad: '+lote.Variedad:''));
+  if(lote.Hibrido) L.push('Híbrido: '+lote.Hibrido);
+  if(lote.Tamano_Grano) L.push('Tamaño de grano: '+lote.Tamano_Grano);
+  L.push('Fecha de recepción: '+fmtD(lote.Fecha_Recepcion));
+  if(lote.Proveedor_Origen) L.push('Proveedor/Origen: '+lote.Proveedor_Origen);
+  if(esPorSacos(lote)){
+    L.push('Peso bruto recibido: '+fmtKg(lote.Peso_Bruto_Recibido_kg)+' kg ('+fmtKg(lote.Cantidad_Sacos||0)+' sacos x '+fmtKg(pesoPorSaco(lote))+'kg)');
+  } else {
+    L.push('Peso bruto recibido: '+fmtKg(lote.Peso_Bruto_Recibido_kg)+' kg');
+  }
+  if(lote.Tipo_Semilla==='Caraota' && num(lote.Peso_Neto_Recepcion_kg)>0){
+    L.push('Humedad inicial: '+fmtPct(lote.Humedad_Inicial_Recepcion));
+    L.push('Porcentaje de secado: '+fmtPct(lote.Porcentaje_Secado));
+    L.push('Pureza física inicial: '+fmtPct(lote.Pureza_Fisica_Inicial));
+    L.push('Porcentaje acondicionado: '+fmtPct(lote.Porcentaje_Acondicionado));
+    L.push('Peso final calculado: '+fmtKg(lote.Peso_Neto_Recepcion_kg)+' kg');
+  }
+  L.push('Stock actual: '+fmtCantidadLote(lote));
+  L.push('Destino: '+(lote.Destino||'—'));
+  L.push('Ubicación en almacén: '+(lote.Ubicacion_Almacen||'—'));
+  L.push('Estado: '+(lote.Estado||'—'));
+  L.push('Registrado por: '+(lote.Registrado_Por||'—'));
+  if(lote.Observaciones) L.push('Observaciones: '+lote.Observaciones);
+  return L.join('\n');
+}
+
+function abrirEtiquetaLote(id){
+  const lote=loteById(id); if(!lote) return;
+  const esMaiz=lote.Tipo_Semilla==='Maíz';
+  const esCaraota=lote.Tipo_Semilla==='Caraota' && num(lote.Peso_Neto_Recepcion_kg)>0;
+
+  let detalleTipo='';
+  if(esMaiz){
+    detalleTipo=(lote.Hibrido?kvEtq('Híbrido',lote.Hibrido):'')+(lote.Tamano_Grano?kvEtq('Tamaño de grano',lote.Tamano_Grano):'');
+  } else if(esCaraota){
+    detalleTipo=kvEtq('Humedad inicial',fmtPct(lote.Humedad_Inicial_Recepcion))+kvEtq('Acondicionado',fmtPct(lote.Porcentaje_Acondicionado));
+  }
+
+  const html=`
+    <div class="modal-head"><div><h3>${ic('qrcode')} Etiqueta de lote</h3><div class="sub">Se imprime solo la etiqueta, no el resto de la pantalla</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
+    <div class="modal-body">
+      <div id="etiquetaPrintArea" class="etiqueta-wrap">
+        <div class="etq-top">
+          <div class="etq-brand">${ic('seedling')} <span>ALBA</span></div>
+          ${seedBadge(lote.Tipo_Semilla)}
+        </div>
+        <div class="etq-lote">${esc(lote.ID_Lote)}</div>
+        <div class="etq-variedad">${esc(lote.Variedad||'—')}</div>
+        <div class="etq-grid">
+          ${kvEtq('Recepción',fmtD(lote.Fecha_Recepcion))}
+          ${kvEtq('Stock actual',fmtCantidadLote(lote))}
+          ${detalleTipo}
+          ${kvEtq('Destino',lote.Destino||'—')}
+          ${kvEtq('Ubicación',lote.Ubicacion_Almacen||'—')}
+          ${kvEtq('Estado',lote.Estado||'—')}
+        </div>
+        <div class="etq-qr-wrap">
+          <div id="etqQrBox" class="etq-qr-box"></div>
+          <div class="etq-qr-hint">Escanea para ver todos<br>los datos del lote</div>
+        </div>
+        <div class="etq-foot">Almacén Leguminosas del Alba · Impreso ${fmtDT(nowStamp())}</div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
+      <button class="btn btn-primary" id="etqImprimir">${ic('printer')} Imprimir etiqueta</button>
+    </div>`;
+  openModal(html,{});
+  const qrBox=$('#etqQrBox');
+  try{
+    if(typeof QRCode==='undefined') throw new Error('QRCode no disponible');
+    qrBox.innerHTML='';
+    new QRCode(qrBox,{text:loteQRText(lote),width:150,height:150,colorDark:'#12141C',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+  }catch(e){
+    qrBox.innerHTML='<div class="etq-qr-error">No se pudo generar el QR (revisa tu conexión a internet) — la etiqueta igual se puede imprimir sin él.</div>';
+  }
+  $('#etqImprimir').onclick=()=>window.print();
 }
 /* ======================= SECADO Y LIMPIEZA DE CARAOTA ======================= */
 function yieldRingSvg(pct){
