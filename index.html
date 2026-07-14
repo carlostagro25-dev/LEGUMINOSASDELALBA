@@ -302,6 +302,9 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
 .mini-note{font-size:12px;color:var(--faint);background:var(--vidrio);border:1px solid var(--linea);border-radius:10px;padding:10px 13px;line-height:1.6}
 .line-item{display:grid;grid-template-columns:1fr 1fr auto auto auto;gap:10px;align-items:end;padding:12px;border:1px solid var(--linea);border-radius:12px;margin-bottom:10px;background:var(--panel-2)}
 .readonly-flag{display:flex;align-items:center;gap:10px;padding:12px 16px;border-radius:12px;background:rgba(59,130,246,.1);border:1px solid rgba(59,130,246,.3);color:var(--otra-lt);font-size:13px;margin-bottom:18px}
+.seg{display:inline-flex;background:var(--panel-2);border-radius:10px;padding:3px;gap:2px;margin-bottom:14px}
+.seg button{padding:8px 15px;border-radius:8px;font-size:12.5px;font-weight:600;color:var(--mute)}
+.seg button.active{background:var(--panel);color:var(--texto);box-shadow:var(--sh)}
 
 .etiqueta-wrap{width:101.6mm;margin:0 auto;padding:16px 18px;background:#fff;border:1px solid var(--linea-strong);border-radius:14px;box-shadow:var(--sh)}
 .etq-top{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
@@ -364,8 +367,8 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
       </span> Almacén Leguminosas del Alba</div>
     <div class="brand-hero">
       <div class="eyebrow">Control de inventario de semillas</div>
-      <h1>Gestion Inteligente de Semillas.</h1>
-      <p>Recepción, secado, pruebas de germinación y despacho de Semillas — todo bajo un estricto control digital, con respaldo de cada movimiento.</p>
+      <h1>Trazabilidad impecable, de la cosecha al saco.</h1>
+      <p>Recepción, secado y limpieza, pruebas de germinación y despacho de maíz, caraota, sorgo y soya — todo en un solo sistema, con respaldo de cada movimiento.</p>
     </div>
     <div class="brand-stats">
       <div class="s"><b id="ls1">—</b><span>Lotes activos</span></div>
@@ -1007,7 +1010,7 @@ function abrirModalNuevoLote(){
       </div>
 
       <div class="grid3" id="nlPesoGenerico">
-        <div class="field"><label>Peso bruto recibido (kg)</label><input id="nlPeso" type="number" min="0" step="0.01" placeholder="0"></div>
+        <div class="field"><label id="nlPesoLabel">Peso bruto recibido (kg)</label><input id="nlPeso" type="number" min="0" step="0.01" placeholder="0"></div>
         <div class="field"><label>Empaque</label><select id="nlEmpaque"><option>Saco 50kg</option><option>Saco 25kg</option><option>Granel</option><option>Otro</option></select></div>
         <div class="field"><label>Cantidad de sacos</label><input id="nlSacos" type="number" min="0" placeholder="0"></div>
       </div>
@@ -1017,6 +1020,12 @@ function abrirModalNuevoLote(){
         <div class="field"><label>Peso total (kg)</label><input id="nlPesoTotalMaiz" type="text" disabled value="0"></div>
       </div>
 
+      <div id="nlCaraotaModoWrap" style="display:none">
+        <div class="seg" id="nlCaraotaSeg">
+          <button type="button" id="nlModoCalc" class="active">${ic('droplet')} Con calculadora</button>
+          <button type="button" id="nlModoDirecto">${ic('checkcircle')} Directo (ya tengo el peso neto)</button>
+        </div>
+      </div>
       <div id="nlCaraotaCalc" style="display:none">
         <div class="mini-note" style="margin-bottom:14px">${ic('droplet')} Calculadora de recepción de caraota — igual a la de tu planilla: Peso final = Peso inicial × ((100%−Humedad) / (100%−% Secado)) × (Pureza física / % Acondicionado).</div>
         <div class="grid2">
@@ -1042,6 +1051,7 @@ function abrirModalNuevoLote(){
     <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="nlGuardar">${ic('checkcircle')} Registrar lote</button></div>`;
   openModal(html,{wide:true});
   const tipoSel=$('#nlTipo');
+  let caraotaModo='calc';
   const recalcMaiz=()=>{
     const sacos=num($('#nlSacosMaiz').value), pxs=num($('#nlPesoSaco').value)||50;
     $('#nlPesoTotalMaiz').value = fmtKg(round2(sacos*pxs));
@@ -1051,22 +1061,33 @@ function abrirModalNuevoLote(){
     const f=calcPesoFinalCaraota(peso,$('#nlHumedad').value,$('#nlSecado').value,$('#nlPureza').value,$('#nlAcond').value);
     $('#nlPesoFinalCaraota').textContent=fmtKg(f)+' kg';
   };
+  const aplicarModoCaraota=()=>{
+    const enCalc = caraotaModo==='calc';
+    $('#nlModoCalc').classList.toggle('active',enCalc);
+    $('#nlModoDirecto').classList.toggle('active',!enCalc);
+    $('#nlCaraotaCalc').style.display = enCalc ? 'block':'none';
+    $('#nlPesoLabel').textContent = enCalc ? 'Peso bruto recibido (kg) — para la calculadora' : 'Peso recibido (kg) — este será el stock del lote';
+    if(enCalc) recalcCaraota();
+  };
   const toggleTipo=()=>{
     const t=tipoSel.value;
     $('#nlCodigoMaizWrap').style.display = t==='Maíz' ? 'block':'none';
     $('#nlMaizFields').style.display = t==='Maíz' ? 'grid':'none';
     $('#nlPesoMaiz').style.display = t==='Maíz' ? 'grid':'none';
     $('#nlPesoGenerico').style.display = t==='Maíz' ? 'none':'grid';
-    $('#nlCaraotaCalc').style.display = t==='Caraota' ? 'block':'none';
+    $('#nlCaraotaModoWrap').style.display = t==='Caraota' ? 'block':'none';
+    $('#nlPesoLabel').textContent = 'Peso bruto recibido (kg)';
+    if(t==='Caraota'){ caraotaModo='calc'; aplicarModoCaraota(); } else { $('#nlCaraotaCalc').style.display='none'; }
     $('#nlNotaCodigo').innerHTML = t==='Maíz'
       ? `${ic('info')} El lote entra automáticamente en estado <b>Cuarentena</b> hasta su primera prueba de germinación.`
       : `${ic('info')} El lote entra automáticamente en estado <b>Cuarentena</b> hasta su primera prueba de germinación. El código de lote se genera solo.`;
     if(t==='Maíz') recalcMaiz();
-    if(t==='Caraota') recalcCaraota();
   };
   tipoSel.onchange=toggleTipo; toggleTipo();
+  $('#nlModoCalc').onclick=()=>{ caraotaModo='calc'; aplicarModoCaraota(); };
+  $('#nlModoDirecto').onclick=()=>{ caraotaModo='directo'; aplicarModoCaraota(); };
   $$('#nlSacosMaiz,#nlPesoSaco').forEach(el=>el.oninput=recalcMaiz);
-  $$('#nlPeso,#nlHumedad,#nlSecado,#nlPureza,#nlAcond').forEach(el=>el.oninput=recalcCaraota);
+  $$('#nlPeso,#nlHumedad,#nlSecado,#nlPureza,#nlAcond').forEach(el=>el.oninput=()=>{ if(tipoSel.value==='Caraota' && caraotaModo==='calc') recalcCaraota(); });
 
   $('#nlGuardar').onclick=async()=>{
     const tipo=$('#nlTipo').value, variedad=$('#nlVariedad').value.trim();
@@ -1090,8 +1111,8 @@ function abrirModalNuevoLote(){
       if(peso<=0){ toast('Indica el peso bruto recibido',true); return; }
     }
 
-    let pesoNeto=0, humedad=0,secado=0,pureza=0,acond=0;
-    if(tipo==='Caraota'){
+    let pesoNeto=0, humedad='',secado='',pureza='',acond='';
+    if(tipo==='Caraota' && caraotaModo==='calc'){
       humedad=num($('#nlHumedad').value); secado=num($('#nlSecado').value); pureza=num($('#nlPureza').value); acond=num($('#nlAcond').value);
       if(pureza<=0||acond<=0){ toast('Indica la pureza física y el porcentaje de acondicionado',true); return; }
       pesoNeto=calcPesoFinalCaraota(peso,humedad,secado,pureza,acond);
@@ -1113,7 +1134,7 @@ function abrirModalNuevoLote(){
       Porcentaje_Secado: tipo==='Caraota' ? secado : '',
       Pureza_Fisica_Inicial: tipo==='Caraota' ? pureza : '',
       Porcentaje_Acondicionado: tipo==='Caraota' ? acond : '',
-      Peso_Neto_Recepcion_kg: tipo==='Caraota' ? pesoNeto : '',
+      Peso_Neto_Recepcion_kg: (tipo==='Caraota' && pesoNeto>0) ? pesoNeto : '',
       Destino: $('#nlDestino').value,
       Ubicacion_Almacen: $('#nlUbicacion').value.trim(),
       Estado:'Cuarentena', Registrado_Por:S.user.Email, Observaciones:$('#nlObs').value.trim()
