@@ -445,7 +445,7 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
    =================================================================== */
 /* ======================= CONFIGURACIÓN ======================= */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbyl0aAbpJycPCccJWTPzlD8zYLMYZO_PlL8E10c6j-Jq0T6i_VXRMA4L-xS6qH8TWUn/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
+  API_URL: 'https://script.google.com/macros/s/AKfycbzoXXRn-r0M4BdeCiuCWdsAERXrZNYP__uoVSAD6WREne8Jl_iCHmDTG9R2EsKbrL4J/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
   ALMACEN_NOMBRE: 'Almacén Leguminosas del Alba',
   GERMINACION_UMBRAL_APTO: 80,
   GERMINACION_DIAS_PROXIMA: 30,
@@ -815,9 +815,11 @@ function nextSeqLocal(list,idField,prefix,digits,withYear){
   return withYear? `${prefix}-${year}-${next}` : `${prefix}-${next}`;
 }
 function recomputeStockLocal(idLote){
-  const total = S.DB.movimientos.filter(m=>String(m.ID_Lote)===String(idLote)).reduce((s,m)=>s+num(m.Cantidad_kg),0);
+  const movsLote = S.DB.movimientos.filter(m=>String(m.ID_Lote)===String(idLote));
+  const total = movsLote.reduce((s,m)=>s+num(m.Cantidad_kg),0);
+  const totalSacos = movsLote.reduce((s,m)=>s+num(m.Sacos),0);
   const lote = S.DB.lotes.find(l=>l.ID_Lote===idLote);
-  if(lote) lote.Stock_Actual_kg = round2(total);
+  if(lote){ lote.Stock_Actual_kg = round2(Math.max(0,total)); lote.Cantidad_Sacos_Actual = round2(Math.max(0,totalSacos)); }
   return total;
 }
 function auditLocal(usuario,accion,detalle){
@@ -836,7 +838,15 @@ function pesoPorSaco(lote){ const v=num(lote&&lote.Peso_Por_Saco_kg); return v>0
 function esPorSacos(lote){ return !!lote && lote.Tipo_Semilla==='Maíz'; }
 function fmtCantidadKg(lote,kg){
   const k=num(kg);
-  if(esPorSacos(lote)){ return fmtKg(round2(k/pesoPorSaco(lote)))+' sacos'; }
+  if(esPorSacos(lote)){
+    // El conteo real de sacos se acumula movimiento a movimiento (cada entrada puede
+    // traer sacos de peso distinto), así que si el kg pedido es el stock actual del
+    // lote usamos el contador real; si no, lo estimamos con el peso por saco.
+    if(Math.abs(k-num(lote.Stock_Actual_kg))<0.01 && lote.Cantidad_Sacos_Actual!==undefined && lote.Cantidad_Sacos_Actual!==''){
+      return fmtKg(num(lote.Cantidad_Sacos_Actual))+' sacos';
+    }
+    return fmtKg(round2(k/pesoPorSaco(lote)))+' sacos';
+  }
   return fmtKg(k)+' kg';
 }
 function fmtCantidadLote(lote){ return fmtCantidadKg(lote, lote?lote.Stock_Actual_kg:0); }
@@ -861,9 +871,10 @@ async function crearLote(lote){
   if(!lote.ID_Lote){ lote.ID_Lote = nextSeqLocal(S.DB.lotes,'ID_Lote',prefix,4,true); }
   const stockInicial = num(lote.Peso_Neto_Recepcion_kg) > 0 ? num(lote.Peso_Neto_Recepcion_kg) : num(lote.Peso_Bruto_Recibido_kg);
   lote.Stock_Actual_kg = stockInicial;
+  lote.Cantidad_Sacos_Actual = num(lote.Cantidad_Sacos)||0;
   if(!lote.Estado) lote.Estado='Cuarentena';
   S.DB.lotes.push(lote);
-  const mov={ID_Movimiento:nextSeqLocal(S.DB.movimientos,'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:lote.ID_Lote,Tipo_Movimiento:'Entrada',Cantidad_kg:stockInicial,ID_Nota:'',Motivo:'Recepción de lote',Usuario:lote.Registrado_Por,Observaciones:lote.Observaciones||''};
+  const mov={ID_Movimiento:nextSeqLocal(S.DB.movimientos,'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:lote.ID_Lote,Tipo_Movimiento:'Entrada',Cantidad_kg:stockInicial,Sacos:num(lote.Cantidad_Sacos)||0,ID_Nota:'',Motivo:'Recepción de lote',Usuario:lote.Registrado_Por,Observaciones:lote.Observaciones||''};
   S.DB.movimientos.push(mov);
   auditLocal(lote.Registrado_Por,'Recepción de lote',lote.ID_Lote+' · '+lote.Tipo_Semilla+' · '+fmtCantidadKg(lote,stockInicial));
   return lote;
@@ -889,6 +900,8 @@ async function dividirLote(payload){
   lote1.Stock_Actual_kg=round2(payload.cantidad1_kg);
   lote1.Peso_Neto_Recepcion_kg=round2(payload.cantidad1_kg);
   lote1.Peso_Bruto_Recibido_kg=round2(payload.cantidad1_kg);
+  lote1.Cantidad_Sacos=round2(payload.sacos1||0);
+  lote1.Cantidad_Sacos_Actual=round2(payload.sacos1||0);
   lote1.Destino=payload.destino1;
   lote1.Lote_Origen=loteOrig.ID_Lote;
   lote1.Fecha_Recepcion=nowStamp();
@@ -901,6 +914,8 @@ async function dividirLote(payload){
   lote2.Stock_Actual_kg=round2(payload.cantidad2_kg);
   lote2.Peso_Neto_Recepcion_kg=round2(payload.cantidad2_kg);
   lote2.Peso_Bruto_Recibido_kg=round2(payload.cantidad2_kg);
+  lote2.Cantidad_Sacos=round2(payload.sacos2||0);
+  lote2.Cantidad_Sacos_Actual=round2(payload.sacos2||0);
   lote2.Destino=payload.destino2;
   lote2.Lote_Origen=loteOrig.ID_Lote;
   lote2.Fecha_Recepcion=nowStamp();
@@ -908,9 +923,10 @@ async function dividirLote(payload){
   lote2.Observaciones=(loteOrig.Observaciones?loteOrig.Observaciones+' · ':'')+'División de '+loteOrig.ID_Lote;
   S.DB.lotes.push(lote2);
 
-  const mov1={ID_Movimiento:nextSeqLocal(S.DB.movimientos,'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:lote1.ID_Lote,Tipo_Movimiento:'División',Cantidad_kg:round2(payload.cantidad1_kg),ID_Nota:'',Motivo:'División de '+loteOrig.ID_Lote+' → '+payload.destino1,Usuario:payload.usuario,Observaciones:payload.motivo||''};
-  const mov2={ID_Movimiento:nextSeqLocal(S.DB.movimientos.concat([mov1]),'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:lote2.ID_Lote,Tipo_Movimiento:'División',Cantidad_kg:round2(payload.cantidad2_kg),ID_Nota:'',Motivo:'División de '+loteOrig.ID_Lote+' → '+payload.destino2,Usuario:payload.usuario,Observaciones:payload.motivo||''};
-  const movOrig={ID_Movimiento:nextSeqLocal(S.DB.movimientos.concat([mov1,mov2]),'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:loteOrig.ID_Lote,Tipo_Movimiento:'División',Cantidad_kg:-round2(stockActual),ID_Nota:'',Motivo:'Repartido en '+lote1.ID_Lote+' y '+lote2.ID_Lote,Usuario:payload.usuario,Observaciones:payload.motivo||''};
+  const sacosActualOrig=num(loteOrig.Cantidad_Sacos_Actual);
+  const mov1={ID_Movimiento:nextSeqLocal(S.DB.movimientos,'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:lote1.ID_Lote,Tipo_Movimiento:'División',Cantidad_kg:round2(payload.cantidad1_kg),Sacos:round2(payload.sacos1||0),ID_Nota:'',Motivo:'División de '+loteOrig.ID_Lote+' → '+payload.destino1,Usuario:payload.usuario,Observaciones:payload.motivo||''};
+  const mov2={ID_Movimiento:nextSeqLocal(S.DB.movimientos.concat([mov1]),'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:lote2.ID_Lote,Tipo_Movimiento:'División',Cantidad_kg:round2(payload.cantidad2_kg),Sacos:round2(payload.sacos2||0),ID_Nota:'',Motivo:'División de '+loteOrig.ID_Lote+' → '+payload.destino2,Usuario:payload.usuario,Observaciones:payload.motivo||''};
+  const movOrig={ID_Movimiento:nextSeqLocal(S.DB.movimientos.concat([mov1,mov2]),'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:loteOrig.ID_Lote,Tipo_Movimiento:'División',Cantidad_kg:-round2(stockActual),Sacos:-sacosActualOrig,ID_Nota:'',Motivo:'Repartido en '+lote1.ID_Lote+' y '+lote2.ID_Lote,Usuario:payload.usuario,Observaciones:payload.motivo||''};
   S.DB.movimientos.push(mov1,mov2,movOrig);
 
   recomputeStockLocal(lote1.ID_Lote); recomputeStockLocal(lote2.ID_Lote); recomputeStockLocal(loteOrig.ID_Lote);
@@ -945,6 +961,26 @@ async function ingresoCustodia(payload){
   S.DB.custodiaMovimientos.push({ID_Movimiento:nextSeqLocal(S.DB.custodiaMovimientos,'ID_Movimiento','CMV',6,false),Fecha:nowStamp(),ID_Custodia:c.ID_Custodia,Tipo_Movimiento:'Ingreso',Cantidad_kg:c.Cantidad_Inicial_kg,Sacos:c.Cantidad_Sacos_Inicial,Usuario:payload.usuario,Motivo:'Ingreso inicial a custodia',Observaciones:''});
   auditLocal(payload.usuario,'Ingreso a custodia de terceros',c.ID_Custodia+' · '+c.Depositante+' · '+fmtCantidadCustodia(c)+' de '+c.Tipo_Semilla);
   return c;
+}
+async function entradaAdicionalCustodia(payload){
+  if(S.online){
+    const r = await API.post(Object.assign({action:'registrarEntradaAdicionalCustodia'},payload));
+    if(r&&r.ok){ await API.bootstrap(); return true; }
+    toast(r&&r.error?r.error:'No se pudo registrar la entrada',true); return false;
+  }
+  const c=custodiaById(payload.idCustodia);
+  if(!c){ toast('Registro de custodia no encontrado',true); return false; }
+  const kg=round2(payload.Cantidad_kg);
+  const sacos=round2(payload.Cantidad_Sacos||0);
+  if(kg<=0){ toast('Indica la cantidad que llegó',true); return false; }
+  c.Cantidad_Actual_kg=round2(num(c.Cantidad_Actual_kg)+kg);
+  c.Cantidad_Inicial_kg=round2(num(c.Cantidad_Inicial_kg)+kg);
+  c.Cantidad_Sacos_Actual=round2(num(c.Cantidad_Sacos_Actual)+sacos);
+  c.Cantidad_Sacos_Inicial=round2(num(c.Cantidad_Sacos_Inicial)+sacos);
+  c.Estado='En custodia';
+  S.DB.custodiaMovimientos.push({ID_Movimiento:nextSeqLocal(S.DB.custodiaMovimientos,'ID_Movimiento','CMV',6,false),Fecha:nowStamp(),ID_Custodia:c.ID_Custodia,Tipo_Movimiento:'Ingreso',Cantidad_kg:kg,Sacos:sacos,Usuario:payload.usuario,Motivo:payload.motivo||'Entrada adicional a custodia',Observaciones:payload.Observaciones||''});
+  auditLocal(payload.usuario,'Entrada adicional a custodia de terceros',c.ID_Custodia+' · '+c.Depositante+' · '+fmtKg(kg)+' kg más de '+c.Tipo_Semilla);
+  return true;
 }
 async function retiroCustodia(payload){
   if(S.online){
@@ -1047,7 +1083,7 @@ async function crearNotaSalida(nota,detalleLineas){
     d.ID_Detalle = nextSeqLocal(S.DB.detalle.concat(guardado),'ID_Detalle','DET',6,false);
     d.ID_Nota = nota.ID_Nota;
     S.DB.detalle.push(d); guardado.push(d);
-    const mov={ID_Movimiento:nextSeqLocal(S.DB.movimientos,'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:d.ID_Lote,Tipo_Movimiento:'Salida',Cantidad_kg:-Math.abs(num(d.Cantidad_kg)),ID_Nota:nota.ID_Nota,Motivo:'Despacho a '+(nota.Nombre_Receptor||''),Usuario:nota.Usuario_Registro,Observaciones:''};
+    const mov={ID_Movimiento:nextSeqLocal(S.DB.movimientos,'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:d.ID_Lote,Tipo_Movimiento:'Salida',Cantidad_kg:-Math.abs(num(d.Cantidad_kg)),Sacos:-Math.abs(num(d.Cantidad_Sacos)),ID_Nota:nota.ID_Nota,Motivo:'Despacho a '+(nota.Nombre_Receptor||''),Usuario:nota.Usuario_Registro,Observaciones:''};
     S.DB.movimientos.push(mov);
     recomputeStockLocal(d.ID_Lote);
   });
@@ -1065,7 +1101,7 @@ async function anularNota(idNota,usuario,motivo){
   if(!nota) return false;
   nota.Estado='Anulada';
   S.DB.detalle.filter(d=>d.ID_Nota===idNota).forEach(d=>{
-    const mov={ID_Movimiento:nextSeqLocal(S.DB.movimientos,'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:d.ID_Lote,Tipo_Movimiento:'Ajuste',Cantidad_kg:Math.abs(num(d.Cantidad_kg)),ID_Nota:idNota,Motivo:'Reversa por anulación de nota '+idNota,Usuario:usuario,Observaciones:motivo||''};
+    const mov={ID_Movimiento:nextSeqLocal(S.DB.movimientos,'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:d.ID_Lote,Tipo_Movimiento:'Ajuste',Cantidad_kg:Math.abs(num(d.Cantidad_kg)),Sacos:Math.abs(num(d.Cantidad_Sacos)),ID_Nota:idNota,Motivo:'Reversa por anulación de nota '+idNota,Usuario:usuario,Observaciones:motivo||''};
     S.DB.movimientos.push(mov);
     recomputeStockLocal(d.ID_Lote);
   });
@@ -1234,7 +1270,7 @@ function renderDashboard(c){
       <div class="silos-wrap">${CONFIG.TIPOS_SEMILLA.map(t=>{
         if(t==='Maíz'){
           const lotesM=S.DB.lotes.filter(l=>l.Tipo_Semilla==='Maíz');
-          const totalSacos=lotesM.reduce((s,l)=>s+num(l.Stock_Actual_kg)/pesoPorSaco(l),0);
+          const totalSacos=lotesM.reduce((s,l)=>s+num(l.Cantidad_Sacos_Actual),0);
           return siloViz(t,porTipo[t]||0,maxTipo,fmtKg(round2(totalSacos))+' sacos');
         }
         return siloViz(t,porTipo[t]||0,maxTipo);
@@ -1431,12 +1467,54 @@ function abrirDetalleCustodia(id){
     </div>
     <div class="modal-foot">
       <button class="btn btn-outline" id="custComprobante">${ic('printer')} Imprimir comprobante</button>
+      ${canWrite()?`<button class="btn btn-ghost" id="custEntrada">${ic('plus')} Agregar entrada</button>`:''}
       ${canWrite()&&r.Estado==='En custodia'?`<button class="btn btn-ghost" id="custRetirar">${ic('shuffle')} Registrar retiro</button>`:''}
       <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
     </div>`;
   openModal(html,{wide:true});
   $('#custComprobante').onclick=()=>imprimirComprobanteCustodia(r);
+  if($('#custEntrada')) $('#custEntrada').onclick=()=>{ closeModal(); abrirModalEntradaAdicionalCustodia(r.ID_Custodia); };
   if($('#custRetirar')) $('#custRetirar').onclick=()=>{ closeModal(); abrirModalRetiroCustodia(r.ID_Custodia); };
+}
+
+/* ======================= ENTRADA ADICIONAL A UN REGISTRO DE CUSTODIA EXISTENTE ======================= */
+function abrirModalEntradaAdicionalCustodia(id){
+  if(!canWrite()) return;
+  const r=custodiaById(id); if(!r) return;
+  const esMaiz=r.Tipo_Semilla==='Maíz';
+  const pxs=num(r.Peso_Por_Saco_kg)||50;
+  const html=`
+    <div class="modal-head"><div><h3>${ic('plus')} Agregar entrada — ${esc(r.Depositante)}</h3><div class="sub">Para cuando el mismo depositante trae más mercancía en despachos distintos (hoy uno, mañana otro...)</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
+    <div class="modal-body">
+      <div class="mini-note" style="margin-bottom:16px">${ic('info')} ${esc(r.Tipo_Semilla)}${r.Variedad?' · '+esc(r.Variedad):''} · En custodia actualmente: <b>${fmtCantidadCustodia(r)}</b></div>
+      ${esMaiz?`
+      <div class="grid3">
+        <div class="field"><label>Sacos que llegan</label><input id="eacSacos" type="number" min="0" step="1" placeholder="0"></div>
+        <div class="field"><label>Peso por saco esta vez (kg)</label><input id="eacPesoSaco" type="number" min="0" step="0.01" value="${pxs}"></div>
+        <div class="field"><label>Kg totales</label><input id="eacKg" type="number" min="0" step="0.01" placeholder="0"></div>
+      </div>
+      <div class="mini-note" style="margin-bottom:14px">${ic('info')} Si esta entrega trae sacos de otro peso (no ${fmtKg(pxs)} kg), cámbialo aquí — el kg se recalcula solo y lo puedes ajustar a mano.</div>`:`
+      <div class="field"><label>Cantidad que llega (kg)</label><input id="eacKg" type="number" min="0" step="0.01" placeholder="0"></div>`}
+      <div class="field"><label>Motivo / referencia</label><input id="eacMotivo" placeholder="Ej. Segundo despacho del mismo depositante"></div>
+      <div class="field"><label>Observaciones</label><textarea id="eacObs" placeholder="Opcional"></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="eacGuardar">${ic('checkcircle')} Registrar entrada</button></div>`;
+  openModal(html);
+  if(esMaiz){
+    const eacSacos=$('#eacSacos'), eacPesoSaco=$('#eacPesoSaco'), eacKg=$('#eacKg');
+    const recalc=()=>{ const s=num(eacSacos.value); if(s>0) eacKg.value=round2(s*num(eacPesoSaco.value)); };
+    eacSacos.oninput=recalc; eacPesoSaco.oninput=recalc;
+  }
+  $('#eacGuardar').onclick=async()=>{
+    const sacos = esMaiz ? num($('#eacSacos').value) : 0;
+    const kg = num($('#eacKg').value);
+    if(kg<=0){ toast(esMaiz?'Indica cuántos sacos llegaron (o el kg total)':'Indica la cantidad que llegó',true); return; }
+    const payload={idCustodia:r.ID_Custodia, Cantidad_kg:kg, Cantidad_Sacos:sacos, motivo:$('#eacMotivo').value.trim()||'Entrada adicional a custodia', Observaciones:$('#eacObs').value.trim(), usuario:S.user.Email};
+    $('#eacGuardar').disabled=true; $('#eacGuardar').textContent='Guardando...';
+    const ok=await entradaAdicionalCustodia(payload);
+    if(ok){ closeModal(); toast('Entrada agregada a '+r.ID_Custodia); renderView(); abrirDetalleCustodia(r.ID_Custodia); }
+    else { $('#eacGuardar').disabled=false; $('#eacGuardar').innerHTML=ic('checkcircle')+' Registrar entrada'; }
+  };
 }
 
 function abrirModalRetiroCustodia(id){
@@ -1742,10 +1820,11 @@ function abrirPasaporte(id){
       }
       kvs+=kv('Registrado por',ev.data.Registrado_Por||'—');
     } else if(ev.tipo==='entrada_extra'){
-      const cantTxt = esPorSacos(lote) ? fmtCantidadKg(lote,ev.data.Cantidad_kg) : fmtKg(ev.data.Cantidad_kg)+' kg';
+      const sacosEv = num(ev.data.Sacos);
+      const cantTxt = (esPorSacos(lote) && sacosEv>0) ? fmtKg(sacosEv)+' sacos' : fmtKg(ev.data.Cantidad_kg)+' kg';
       desc=`${cantTxt} más recibidos${ev.data.Motivo?' · '+esc(ev.data.Motivo):''}`;
       kvs=kv('Cantidad',fmtKg(ev.data.Cantidad_kg)+' kg');
-      if(esPorSacos(lote)) kvs+=kv('Sacos',fmtKg(round2(num(ev.data.Cantidad_kg)/pesoPorSaco(lote))));
+      if(esPorSacos(lote) && sacosEv>0) kvs+=kv('Sacos',fmtKg(sacosEv));
       kvs+=kv('Registrado por',ev.data.Usuario||'—');
       if(ev.data.Observaciones) kvs+=kv('Observaciones',ev.data.Observaciones);
     } else if(ev.tipo==='secado'){
@@ -1813,10 +1892,12 @@ function abrirModalEntradaAdicional(loteId){
     <div class="modal-body">
       <div class="mini-note" style="margin-bottom:16px">${ic('info')} ${esc(lote.Tipo_Semilla)} · ${esc(lote.Variedad||'—')} · Stock actual: <b>${fmtCantidadLote(lote)}</b></div>
       ${esMaiz?`
-      <div class="grid2">
+      <div class="grid3">
         <div class="field"><label>Sacos que llegan</label><input id="eaSacos" type="number" min="0" step="1" placeholder="0"></div>
-        <div class="field"><label>Kg (auto · ${fmtKg(pxs)} kg/saco)</label><div class="mono" id="eaKgAuto" style="padding:11px 0;font-size:13px;color:var(--faint)">0 kg</div></div>
-      </div>`:`
+        <div class="field"><label>Peso por saco esta vez (kg)</label><input id="eaPesoSaco" type="number" min="0" step="0.01" value="${pxs}"></div>
+        <div class="field"><label>Kg totales</label><input id="eaKg" type="number" min="0" step="0.01" placeholder="0"></div>
+      </div>
+      <div class="mini-note" style="margin-bottom:14px">${ic('info')} Si esta entrega trae sacos de otro peso (no ${fmtKg(pxs)} kg), cámbialo aquí — el kg se recalcula solo y lo puedes ajustar a mano.</div>`:`
       <div class="field"><label>Cantidad que llega (kg)</label><input id="eaKg" type="number" min="0" step="0.01" placeholder="0"></div>`}
       <div class="grid2">
         <div class="field"><label>Fecha de esta entrada</label><input id="eaFecha" type="date" value="${todayISO()}"></div>
@@ -1827,15 +1908,17 @@ function abrirModalEntradaAdicional(loteId){
     <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="eaGuardar">${ic('checkcircle')} Registrar entrada</button></div>`;
   openModal(html);
   if(esMaiz){
-    const eaSacos=$('#eaSacos'), eaKgAuto=$('#eaKgAuto');
-    eaSacos.oninput=()=>{ const kg=round2(num(eaSacos.value)*pxs); eaKgAuto.textContent=fmtKg(kg)+' kg'; };
+    const eaSacos=$('#eaSacos'), eaPesoSaco=$('#eaPesoSaco'), eaKg=$('#eaKg');
+    const recalc=()=>{ const s=num(eaSacos.value); if(s>0) eaKg.value=round2(s*num(eaPesoSaco.value)); };
+    eaSacos.oninput=recalc; eaPesoSaco.oninput=recalc;
   }
   $('#eaGuardar').onclick=async()=>{
-    const kg = esMaiz ? round2(num($('#eaSacos').value)*pxs) : num($('#eaKg').value);
-    if(kg<=0){ toast(esMaiz?'Indica cuántos sacos llegaron':'Indica la cantidad que llegó',true); return; }
+    const sacos = esMaiz ? num($('#eaSacos').value) : 0;
+    const kg = num($('#eaKg').value);
+    if(kg<=0){ toast(esMaiz?'Indica cuántos sacos llegaron (o el kg total)':'Indica la cantidad que llegó',true); return; }
     const proveedor=$('#eaProveedor').value.trim();
     const motivo='Entrada adicional'+(proveedor?' — '+proveedor:'')+' ('+fmtD($('#eaFecha').value||todayISO())+')';
-    const mov={ID_Lote:lote.ID_Lote, Tipo_Movimiento:'Entrada_Adicional', Cantidad_kg:kg, Motivo:motivo, Usuario:S.user.Email, Observaciones:$('#eaObs').value.trim()};
+    const mov={ID_Lote:lote.ID_Lote, Tipo_Movimiento:'Entrada_Adicional', Cantidad_kg:kg, Sacos:sacos, Motivo:motivo, Usuario:S.user.Email, Observaciones:$('#eaObs').value.trim()};
     $('#eaGuardar').disabled=true; $('#eaGuardar').textContent='Guardando...';
     const ok=await registrarMovimiento(mov);
     if(ok){ closeModal(); toast('Entrada agregada a '+lote.ID_Lote); renderView(); abrirPasaporte(lote.ID_Lote); }
@@ -1849,7 +1932,10 @@ function abrirModalDividirLote(loteId){
   const lote=loteById(loteId); if(!lote) return;
   const stock=num(lote.Stock_Actual_kg);
   if(stock<=0){ toast('Este lote no tiene stock disponible para dividir',true); return; }
+  const esMaiz=lote.Tipo_Semilla==='Maíz';
+  const sacosStock=num(lote.Cantidad_Sacos_Actual);
   const sugerido1=round2(stock*0.7);
+  const sacosSugerido1=esMaiz?Math.round(sacosStock*0.7):0;
   const html=`
     <div class="modal-head"><div><h3>${ic('shuffle')} Dividir lote ${esc(lote.ID_Lote)}</h3><div class="sub">Reparte el stock en dos lotes nuevos con destinos distintos — no afecta la calculadora ni las mermas ya registradas</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
     <div class="modal-body">
@@ -1864,6 +1950,7 @@ function abrirModalDividirLote(loteId){
           <select id="dvDest1"><option value="Semilla">Semilla</option><option value="Consumo">Consumo</option></select>
         </div>
       </div>
+      ${esMaiz?`<div class="field"><label>Parte 1 — Sacos</label><input id="dvSacos1" type="number" min="0" step="1" value="${sacosSugerido1}"></div>`:''}
       <div class="grid2">
         <div class="field">
           <label>Parte 2 — Cantidad (kg) <span id="dvKg2Auto" class="hint" style="text-transform:none;font-weight:400"></span></label>
@@ -1874,6 +1961,8 @@ function abrirModalDividirLote(loteId){
           <select id="dvDest2"><option value="Consumo">Consumo</option><option value="Semilla">Semilla</option></select>
         </div>
       </div>
+      ${esMaiz?`<div class="field"><label>Parte 2 — Sacos</label><input id="dvSacos2" type="number" min="0" step="1" value="${round2(sacosStock-sacosSugerido1)}"></div>
+      <div class="mini-note" style="margin-bottom:14px">${ic('info')} Si los sacos de esta parte pesan distinto al promedio del lote, ajusta los sacos de cada parte a mano — no tienen que ser proporcionales al kg.</div>`:''}
       <div class="res-row total" id="dvSumaRow" style="padding:12px 16px;background:var(--panel-2);border-radius:var(--r-sm);margin-bottom:6px">
         <span class="l">Suma de ambas partes</span><span class="v" id="dvSuma">0,00 kg</span>
       </div>
@@ -1897,7 +1986,8 @@ function abrirModalDividirLote(loteId){
     const c1=num(kg1.value), c2=num(kg2.value);
     if(c1<=0||c2<=0){ toast('Ambas cantidades deben ser mayores a 0',true); return; }
     if(Math.abs((c1+c2)-stock)>0.01){ toast('La suma debe ser '+fmtKg(stock)+' kg (actual: '+fmtKg(c1+c2)+' kg)',true); return; }
-    const payload={idLoteOriginal:lote.ID_Lote,cantidad1_kg:c1,cantidad2_kg:c2,destino1:$('#dvDest1').value,destino2:$('#dvDest2').value,usuario:S.user.Email,motivo:$('#dvMotivo').value.trim()};
+    const sacos1=esMaiz?num($('#dvSacos1').value):0, sacos2=esMaiz?num($('#dvSacos2').value):0;
+    const payload={idLoteOriginal:lote.ID_Lote,cantidad1_kg:c1,cantidad2_kg:c2,sacos1:sacos1,sacos2:sacos2,destino1:$('#dvDest1').value,destino2:$('#dvDest2').value,usuario:S.user.Email,motivo:$('#dvMotivo').value.trim()};
     $('#dvGuardar').disabled=true; $('#dvGuardar').textContent='Dividiendo...';
     const r=await dividirLote(payload);
     if(r&&r.ok){ closeModal(); toast('Lote dividido en '+r.lotes[0].ID_Lote+' y '+r.lotes[1].ID_Lote); renderNav(); renderView(); }
@@ -2252,6 +2342,8 @@ function abrirModalAjuste(loteId){
   const lotes=[...S.DB.lotes].sort((a,b)=>(parseD(b.Fecha_Recepcion)||0)-(parseD(a.Fecha_Recepcion)||0));
   if(!lotes.length){ toast('No hay lotes registrados',true); return; }
   const sel=loteId||lotes[0].ID_Lote;
+  const loteSel=loteById(sel);
+  const esMaiz=loteSel&&loteSel.Tipo_Semilla==='Maíz';
   const html=`
     <div class="modal-head"><div><h3>${ic('shuffle')} Ajuste / devolución</h3><div class="sub">Corrige el stock de un lote con trazabilidad completa</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
     <div class="modal-body">
@@ -2260,19 +2352,24 @@ function abrirModalAjuste(loteId){
         <div class="field"><label>Tipo de movimiento</label><select id="ajTipo"><option value="Ajuste">Ajuste de inventario</option><option value="Devolución">Devolución</option></select></div>
         <div class="field"><label>Dirección</label><select id="ajDir"><option value="+">Entra al stock (+)</option><option value="-">Sale del stock (−)</option></select></div>
       </div>
-      <div class="field"><label>Cantidad (kg)</label><input id="ajCantidad" type="number" min="0" step="0.01" placeholder="0"></div>
+      <div class="grid2">
+        <div class="field"><label>Cantidad (kg)</label><input id="ajCantidad" type="number" min="0" step="0.01" placeholder="0"></div>
+        <div class="field" id="ajSacosWrap" style="display:${esMaiz?'block':'none'}"><label>Sacos (opcional)</label><input id="ajSacos" type="number" min="0" step="1" placeholder="0"></div>
+      </div>
       <div class="field"><label>Motivo</label><input id="ajMotivo" placeholder="Ej. Corrección de conteo físico, devolución de comprador..."></div>
       <div class="field"><label>Observaciones</label><textarea id="ajObs" placeholder="Detalles adicionales..."></textarea></div>
     </div>
     <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="ajGuardar">${ic('checkcircle')} Registrar</button></div>`;
   openModal(html);
+  $('#ajLote').onchange=()=>{ const l=loteById($('#ajLote').value); $('#ajSacosWrap').style.display=(l&&l.Tipo_Semilla==='Maíz')?'block':'none'; };
   $('#ajTipo').onchange=()=>{ if($('#ajTipo').value==='Devolución') $('#ajDir').value='+'; };
   $('#ajGuardar').onclick=async()=>{
     const cant=num($('#ajCantidad').value), motivo=$('#ajMotivo').value.trim();
     if(cant<=0){ toast('Indica la cantidad',true); return; }
     if(!motivo){ toast('Indica el motivo',true); return; }
     const signo=$('#ajDir').value==='-'?-1:1;
-    const mov={ID_Lote:$('#ajLote').value, Tipo_Movimiento:$('#ajTipo').value, Cantidad_kg:round2(cant*signo), Motivo:motivo, Usuario:S.user.Email, Observaciones:$('#ajObs').value.trim()};
+    const sacosEl=$('#ajSacos');
+    const mov={ID_Lote:$('#ajLote').value, Tipo_Movimiento:$('#ajTipo').value, Cantidad_kg:round2(cant*signo), Sacos:sacosEl?round2(num(sacosEl.value)*signo):0, Motivo:motivo, Usuario:S.user.Email, Observaciones:$('#ajObs').value.trim()};
     $('#ajGuardar').disabled=true; $('#ajGuardar').textContent='Guardando...';
     const ok=await registrarMovimiento(mov);
     if(ok){ closeModal(); toast('Movimiento registrado'); renderView(); }
@@ -2718,7 +2815,7 @@ function pdfReporteGeneral(){
   const resumen=CONFIG.TIPOS_SEMILLA.map(t=>{
     if(t==='Maíz'){
       const lotesM=S.DB.lotes.filter(l=>l.Tipo_Semilla==='Maíz');
-      const sacosM=round2(lotesM.reduce((s,l)=>s+num(l.Stock_Actual_kg)/pesoPorSaco(l),0));
+      const sacosM=round2(lotesM.reduce((s,l)=>s+num(l.Cantidad_Sacos_Actual),0));
       return [t,fmtKg(sacosM)+' sacos'];
     }
     return [t,fmtKg(porTipo[t]||0)+' kg'];
@@ -2735,7 +2832,7 @@ function pdfReportePorTipo(tipo){
   const lotes=[...S.DB.lotes].filter(l=>l.Tipo_Semilla===tipo).sort((a,b)=>(parseD(b.Fecha_Recepcion)||0)-(parseD(a.Fecha_Recepcion)||0));
   const stock=lotes.reduce((s,l)=>s+num(l.Stock_Actual_kg),0);
   const esMaiz=tipo==='Maíz';
-  const stockSacos=esMaiz?round2(lotes.reduce((s,l)=>s+num(l.Stock_Actual_kg)/pesoPorSaco(l),0)):0;
+  const stockSacos=esMaiz?round2(lotes.reduce((s,l)=>s+num(l.Cantidad_Sacos_Actual),0)):0;
   const stockDisp=esMaiz?fmtKg(stockSacos)+' sacos':fmtKg(stock)+' kg';
   const aptos=lotes.filter(l=>l.Estado==='Apto para Semilla').length;
   const cuarentena=lotes.filter(l=>l.Estado==='Cuarentena').length;
