@@ -27,7 +27,8 @@
   --caraota:#8B5CF6; --caraota-lt:#6D28D9;
   --sorgo:#F97316;  --sorgo-lt:#C2410C;
   --soya:#22C55E;   --soya-lt:#15803D;
-  --Pasto:#758e69;   --Pasto-lt:#82698e;
+  --pasto:#65A30D;  --pasto-lt:#3F6212;
+  --girasol:#EAB308; --girasol-lt:#A16207;
   --otra:#3B82F6;   --otra-lt:#1D4ED8;
 
   --ok:#22C55E; --ok-lt:#15803D; --warn:#CA8A04; --warn-dk:#92660A; --bad:#EF4444; --bad-lt:#B91C1C; --info:#2563EB;
@@ -157,7 +158,7 @@ svg{display:block}
 .card-head .sub{font-size:12px;color:var(--faint);margin-top:2px;font-weight:400;font-family:var(--fbody);letter-spacing:0;text-transform:none}
 
 /* ---------- KPI tiles ---------- */
-.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin-bottom:22px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(155px,1fr));gap:14px;margin-bottom:22px}
 .kpi{background:var(--panel);border:1px solid var(--linea);border-radius:var(--r);padding:18px 19px;position:relative;overflow:hidden}
 .kpi::before{content:"";position:absolute;left:0;top:0;bottom:0;width:3px;background:var(--accent,var(--maiz))}
 .kpi .lab{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--faint);font-weight:600}
@@ -184,7 +185,15 @@ svg{display:block}
 .seed-badge.tipo-caraota{background:var(--caraota-lt);color:#fff} .seed-badge.tipo-caraota .dot{background:#fff;opacity:.85}
 .seed-badge.tipo-sorgo{background:var(--sorgo-lt);color:#fff} .seed-badge.tipo-sorgo .dot{background:#fff;opacity:.85}
 .seed-badge.tipo-soya{background:var(--soya-lt);color:#fff} .seed-badge.tipo-soya .dot{background:#fff;opacity:.85}
+.seed-badge.tipo-pasto{background:var(--pasto-lt);color:#fff} .seed-badge.tipo-pasto .dot{background:#fff;opacity:.85}
+.seed-badge.tipo-girasol{background:var(--girasol-lt);color:#fff} .seed-badge.tipo-girasol .dot{background:#fff;opacity:.85}
 .seed-badge.tipo-otra{background:var(--otra-lt);color:#fff} .seed-badge.tipo-otra .dot{background:#fff;opacity:.85}
+
+.rubro-list{display:flex;flex-direction:column;gap:8px;max-height:260px;overflow-y:auto}
+.rubro-row{display:flex;align-items:center;gap:12px;padding:9px 12px;border:1.5px solid var(--linea);border-radius:var(--r-sm);background:var(--panel-2)}
+.rubro-row .rubro-prefijo{margin-left:auto;font-size:11.5px;color:var(--faint);background:var(--panel);padding:3px 9px;border-radius:20px;border:1px solid var(--linea-strong)}
+.rubro-row .rubro-base{font-size:10.5px;color:var(--faint);font-style:italic}
+.rubro-row .rubro-del{color:var(--bad-lt)}
 
 .st-badge{display:inline-flex;align-items:center;padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
 .st-badge.ok{background:var(--ok-lt);color:#fff}
@@ -436,14 +445,181 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
    =================================================================== */
 /* ======================= CONFIGURACIÓN ======================= */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxRDzZrs_INwZfLZsYc2JaU2N3rT_o1cqj3ZKm_mgJVjiXsGutXEBL3OGWJCiir6YWn/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
+  API_URL: 'https://script.google.com/macros/s/AKfycbwFiMMDdNiyxDBtYkFRSPdi6thrHfqF2eCIvJTCtJyY-4MD_iBpn4gpOI6zg3Jj5wM/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
   ALMACEN_NOMBRE: 'Almacén Leguminosas del Alba',
   GERMINACION_UMBRAL_APTO: 80,
   GERMINACION_DIAS_PROXIMA: 30,
   STOCK_BAJO_KG: 300,
-  TIPOS_SEMILLA: ['Maíz','Caraota','Sorgo','Soya','Otra'],
-  PREFIJOS: {'Maíz':'MZ','Caraota':'CR','Sorgo':'SG','Soya':'SY','Otra':'OT'}
+  /* ===== RUBROS =====
+     Para agregar un rubro nuevo de forma permanente, añádelo aquí (y con el
+     mismo prefijo en Code.gs, CONFIG.PREFIJOS, para que el backend genere
+     los mismos códigos). También puedes agregarlos sin tocar código desde
+     la app: botón "Rubros" en Lotes e inventario o desde el formulario de
+     Nuevo lote — esos se guardan en este navegador. */
+  TIPOS_SEMILLA: ['Maíz','Caraota','Sorgo','Soya','Pasto','Girasol','Otra'],
+  PREFIJOS: {'Maíz':'MZ','Caraota':'CR','Sorgo':'SG','Soya':'SY','Pasto':'PS','Girasol':'GR','Otra':'OT'},
+  RUBROS_PROTEGIDOS: ['Maíz','Caraota','Sorgo','Soya','Pasto','Girasol','Otra'],
+  /* Planes bajo los cuales se imputa cada nota de salida (financiamiento / programas).
+     Se puede ampliar desde la app con el botón "Planes" en Notas de salida. */
+  PLANES: ['General','FINAGRO Maíz','FINAGRO Caraota','Agrotendencias'],
+  PLANES_PROTEGIDOS: ['General','FINAGRO Maíz','FINAGRO Caraota','Agrotendencias']
 };
+
+/* ======================= RUBROS PERSONALIZADOS (localStorage) =======================
+   Permite agregar rubros nuevos (ej. Pasto, Girasol, Trigo...) desde la propia app,
+   sin tocar código. Se guardan en este navegador y se fusionan con CONFIG al iniciar.
+   Si además usas el backend de Google Sheets, agrega el mismo prefijo en Code.gs
+   (CONFIG.PREFIJOS) para que los códigos de lote generados en el servidor coincidan;
+   si no lo haces, el servidor igual funciona, solo usará el prefijo genérico "OT". */
+const RUBROS_LS_KEY = 'alba_rubros_custom_v1';
+function cargarRubrosPersonalizados(){
+  try{
+    const raw = localStorage.getItem(RUBROS_LS_KEY);
+    if(!raw) return;
+    const extra = JSON.parse(raw);
+    Object.keys(extra).forEach(nombre=>{
+      if(!CONFIG.TIPOS_SEMILLA.includes(nombre)) CONFIG.TIPOS_SEMILLA.splice(CONFIG.TIPOS_SEMILLA.length-1,0,nombre); // antes de "Otra"
+      CONFIG.PREFIJOS[nombre] = extra[nombre];
+    });
+  }catch(e){ console.warn('No se pudieron cargar los rubros guardados',e); }
+}
+function guardarRubroPersonalizado(nombre,prefijo){
+  let extra={};
+  try{ extra = JSON.parse(localStorage.getItem(RUBROS_LS_KEY)||'{}'); }catch(e){}
+  extra[nombre]=prefijo;
+  localStorage.setItem(RUBROS_LS_KEY, JSON.stringify(extra));
+}
+function eliminarRubroPersonalizado(nombre){
+  let extra={};
+  try{ extra = JSON.parse(localStorage.getItem(RUBROS_LS_KEY)||'{}'); }catch(e){}
+  delete extra[nombre];
+  localStorage.setItem(RUBROS_LS_KEY, JSON.stringify(extra));
+  const i=CONFIG.TIPOS_SEMILLA.indexOf(nombre); if(i>-1) CONFIG.TIPOS_SEMILLA.splice(i,1);
+  delete CONFIG.PREFIJOS[nombre];
+}
+function rubrosCustomGuardados(){
+  try{ return JSON.parse(localStorage.getItem(RUBROS_LS_KEY)||'{}'); }catch(e){ return {}; }
+}
+
+function abrirModalRubros(){
+  const custom = rubrosCustomGuardados();
+  const filas = CONFIG.TIPOS_SEMILLA.filter(t=>t!=='Otra').map(t=>{
+    const esCustom = Object.prototype.hasOwnProperty.call(custom,t);
+    return `<div class="rubro-row">
+      <span class="seed-badge tipo-${tipoClass(t)}"><span class="dot"></span>${esc(t)}</span>
+      <span class="rubro-prefijo mono">${esc(CONFIG.PREFIJOS[t]||'OT')}</span>
+      ${esCustom?`<button class="btn btn-ghost btn-sm rubro-del" data-t="${esc(t)}" title="Quitar rubro">${ic('trash')}</button>`:`<span class="rubro-base">de fábrica</span>`}
+    </div>`;
+  }).join('');
+  const html=`
+    <div class="modal-head"><div><h3>${ic('sprout')} Gestionar rubros</h3><div class="sub">Agrega los cultivos que maneje tu almacén — se usan en todos los formularios y reportes</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
+    <div class="modal-body">
+      <div class="rubro-list" id="rubroList">${filas}</div>
+      <div class="section-title" style="margin-top:18px">Agregar rubro nuevo</div>
+      <div class="grid2">
+        <div class="field"><label>Nombre del rubro</label><input id="rbNombre" placeholder="Ej. Frijol, Trigo, Avena..."></div>
+        <div class="field"><label>Prefijo (2–3 letras)</label><input id="rbPrefijo" maxlength="4" placeholder="Ej. FR" style="text-transform:uppercase"></div>
+      </div>
+      <div class="mini-note">${ic('info')} El prefijo se usa para generar los códigos de lote automáticamente, ej. <b>FR-2026-0001</b>. Si tienes el backend conectado, agrega este mismo prefijo en Code.gs (CONFIG.PREFIJOS) para mantenerlos sincronizados.</div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
+      <button class="btn btn-primary" id="rbGuardar">${ic('plus')} Agregar rubro</button>
+    </div>`;
+  openModal(html);
+  const nombreEl=$('#rbNombre'), prefEl=$('#rbPrefijo');
+  nombreEl.oninput=()=>{ if(!prefEl.dataset.tocado){ prefEl.value=nombreEl.value.trim().slice(0,3).toUpperCase(); } };
+  prefEl.oninput=()=>{ prefEl.dataset.tocado='1'; prefEl.value=prefEl.value.toUpperCase(); };
+  $('#rbGuardar').onclick=()=>{
+    const nombre=nombreEl.value.trim();
+    const prefijo=prefEl.value.trim().toUpperCase();
+    if(!nombre){ toast('Indica el nombre del rubro',true); return; }
+    if(!prefijo || prefijo.length<2){ toast('El prefijo debe tener al menos 2 letras',true); return; }
+    if(CONFIG.TIPOS_SEMILLA.includes(nombre)){ toast('Ese rubro ya existe',true); return; }
+    if(Object.values(CONFIG.PREFIJOS).includes(prefijo)){ toast('Ese prefijo ya está en uso, elige otro',true); return; }
+    CONFIG.TIPOS_SEMILLA.splice(CONFIG.TIPOS_SEMILLA.length-1,0,nombre);
+    CONFIG.PREFIJOS[nombre]=prefijo;
+    guardarRubroPersonalizado(nombre,prefijo);
+    toast('Rubro "'+nombre+'" agregado');
+    closeModal();
+    renderView();
+  };
+  $$('.rubro-del',$('#rubroList')).forEach(btn=>btn.onclick=()=>{
+    const t=btn.dataset.t;
+    const enUso = S.DB.lotes.some(l=>l.Tipo_Semilla===t);
+    if(enUso){ toast('No puedes quitar "'+t+'" porque ya tiene lotes registrados',true); return; }
+    eliminarRubroPersonalizado(t);
+    toast('Rubro "'+t+'" eliminado');
+    abrirModalRubros();
+  });
+}
+
+/* ======================= PLANES DE FINANCIAMIENTO (localStorage) =======================
+   Igual que los rubros: permite agregar planes nuevos (ej. otro programa de financiamiento)
+   desde la propia app, sin tocar código. Se usan para imputar cada nota de salida. */
+const PLANES_LS_KEY = 'alba_planes_custom_v1';
+function cargarPlanesPersonalizados(){
+  try{
+    const raw = localStorage.getItem(PLANES_LS_KEY);
+    if(!raw) return;
+    const extra = JSON.parse(raw);
+    extra.forEach(nombre=>{ if(!CONFIG.PLANES.includes(nombre)) CONFIG.PLANES.push(nombre); });
+  }catch(e){ console.warn('No se pudieron cargar los planes guardados',e); }
+}
+function guardarPlanPersonalizado(nombre){
+  let extra=[];
+  try{ extra = JSON.parse(localStorage.getItem(PLANES_LS_KEY)||'[]'); }catch(e){}
+  if(!extra.includes(nombre)) extra.push(nombre);
+  localStorage.setItem(PLANES_LS_KEY, JSON.stringify(extra));
+}
+function eliminarPlanPersonalizado(nombre){
+  let extra=[];
+  try{ extra = JSON.parse(localStorage.getItem(PLANES_LS_KEY)||'[]'); }catch(e){}
+  extra = extra.filter(x=>x!==nombre);
+  localStorage.setItem(PLANES_LS_KEY, JSON.stringify(extra));
+  const i=CONFIG.PLANES.indexOf(nombre); if(i>-1) CONFIG.PLANES.splice(i,1);
+}
+
+function abrirModalPlanes(){
+  const custom = (()=>{ try{ return JSON.parse(localStorage.getItem(PLANES_LS_KEY)||'[]'); }catch(e){ return []; } })();
+  const filas = CONFIG.PLANES.map(p=>{
+    const esCustom = custom.includes(p);
+    return `<div class="rubro-row">
+      <span class="st-badge info">${esc(p)}</span>
+      ${esCustom?`<button class="btn btn-ghost btn-sm rubro-del" data-t="${esc(p)}" title="Quitar plan" style="margin-left:auto">${ic('trash')}</button>`:`<span class="rubro-base" style="margin-left:auto">de fábrica</span>`}
+    </div>`;
+  }).join('');
+  const html=`
+    <div class="modal-head"><div><h3>${ic('clipboardcheck')} Gestionar planes</h3><div class="sub">Programas o convenios bajo los que se imputan las salidas — ej. FINAGRO, Agrotendencias</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
+    <div class="modal-body">
+      <div class="rubro-list" id="planList">${filas}</div>
+      <div class="section-title" style="margin-top:18px">Agregar plan nuevo</div>
+      <div class="field"><label>Nombre del plan</label><input id="plNombre" placeholder="Ej. FINAGRO Sorgo, Banco Agrícola..."></div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
+      <button class="btn btn-primary" id="plGuardar">${ic('plus')} Agregar plan</button>
+    </div>`;
+  openModal(html);
+  $('#plGuardar').onclick=()=>{
+    const nombre=$('#plNombre').value.trim();
+    if(!nombre){ toast('Indica el nombre del plan',true); return; }
+    if(CONFIG.PLANES.includes(nombre)){ toast('Ese plan ya existe',true); return; }
+    CONFIG.PLANES.push(nombre);
+    guardarPlanPersonalizado(nombre);
+    toast('Plan "'+nombre+'" agregado');
+    closeModal();
+    renderView();
+  };
+  $$('.rubro-del',$('#planList')).forEach(btn=>btn.onclick=()=>{
+    const p=btn.dataset.t;
+    const enUso = S.DB.notas.some(n=>n.Plan===p);
+    if(enUso){ toast('No puedes quitar "'+p+'" porque ya tiene notas registradas',true); return; }
+    eliminarPlanPersonalizado(p);
+    toast('Plan "'+p+'" eliminado');
+    abrirModalPlanes();
+  });
+}
 
 /* ======================= ICONOS (línea, estilo feather) ======================= */
 const ICONS = {
@@ -520,12 +696,21 @@ const SEED = {
     {ID_Prueba:'GER-000003',ID_Lote:'SY-2026-0001',Fecha_Prueba:'2026-06-18',Semillas_Probadas:100,Semillas_Germinadas:64,Porcentaje_Germinacion:64,Resultado:'Solo Consumo',Proxima_Prueba:'2026-07-18',Registrado_Por:'operador2@alba.com',Observaciones:'Por debajo del umbral, reclasificado'},
   ],
   notas:[
-    {ID_Nota:'SAL-2026-0001',Fecha:'2026-07-01 14:20',Nombre_Receptor:'Pedro Ramírez',Cedula_Receptor:'V-12.345.678',Telefono_Receptor:'0414-1234567',Entregado_Por:'Juan Pérez',Autorizado_Por:'Rafael Mendoza',Estado:'Emitida',PDF_Link:'',Usuario_Registro:'operador1@alba.com',Observaciones:'Entrega de semilla certificada'},
-    {ID_Nota:'SAL-2026-0002',Fecha:'2026-07-03 15:05',Nombre_Receptor:'Ana Torres',Cedula_Receptor:'V-15.902.331',Telefono_Receptor:'0416-9988771',Entregado_Por:'Ysabel Rondón',Autorizado_Por:'Rafael Mendoza',Estado:'Emitida',PDF_Link:'',Usuario_Registro:'operador2@alba.com',Observaciones:''},
+    {ID_Nota:'SAL-2026-0001',Fecha:'2026-07-01 14:20',Nombre_Receptor:'Pedro Ramírez',Cedula_Receptor:'V-12.345.678',Telefono_Receptor:'0414-1234567',Entregado_Por:'Juan Pérez',Autorizado_Por:'Rafael Mendoza',Plan:'FINAGRO Maíz',Estado:'Emitida',PDF_Link:'',Usuario_Registro:'operador1@alba.com',Observaciones:'Entrega de semilla certificada'},
+    {ID_Nota:'SAL-2026-0002',Fecha:'2026-07-03 15:05',Nombre_Receptor:'Ana Torres',Cedula_Receptor:'V-15.902.331',Telefono_Receptor:'0416-9988771',Entregado_Por:'Ysabel Rondón',Autorizado_Por:'Rafael Mendoza',Plan:'General',Estado:'Emitida',PDF_Link:'',Usuario_Registro:'operador2@alba.com',Observaciones:''},
   ],
   detalle:[
     {ID_Detalle:'DET-000001',ID_Nota:'SAL-2026-0001',ID_Lote:'MZ-2026-0001',Tipo_Semilla:'Maíz',Variedad_Hibrido:'DK-410',Cantidad_kg:800,Cantidad_Sacos:16},
     {ID_Detalle:'DET-000002',ID_Nota:'SAL-2026-0002',ID_Lote:'CR-2026-0001',Tipo_Semilla:'Caraota',Variedad_Hibrido:'Tacarigua',Cantidad_kg:150,Cantidad_Sacos:3},
+  ],
+  custodia:[
+    {ID_Custodia:'CUS-2026-0001',Depositante:'Cooperativa Valle Verde',Cedula_RIF:'J-30.112.233-4',Telefono:'0412-5551234',Tipo_Semilla:'Maíz',Variedad:'DK-410',Cantidad_Inicial_kg:2000,Cantidad_Actual_kg:2000,Cantidad_Sacos_Inicial:40,Cantidad_Sacos_Actual:40,Peso_Por_Saco_kg:50,Fecha_Ingreso:'2026-06-18',Estado:'En custodia',Registrado_Por:'operador1@alba.com',Observaciones:'Servicio de almacenamiento — cliente externo'},
+    {ID_Custodia:'CUS-2026-0002',Depositante:'Agropecuaria Los Llanos C.A.',Cedula_RIF:'J-29.887.001-2',Telefono:'0424-7778899',Tipo_Semilla:'Sorgo',Variedad:'RB-Sorgo 8',Cantidad_Inicial_kg:1200,Cantidad_Actual_kg:700,Cantidad_Sacos_Inicial:30,Cantidad_Sacos_Actual:17,Peso_Por_Saco_kg:40,Fecha_Ingreso:'2026-05-30',Estado:'En custodia',Registrado_Por:'operador2@alba.com',Observaciones:'Retiro parcial el 2026-07-05'},
+  ],
+  custodiaMovimientos:[
+    {ID_Movimiento:'CMV-000001',Fecha:'2026-06-18 09:15',ID_Custodia:'CUS-2026-0001',Tipo_Movimiento:'Ingreso',Cantidad_kg:2000,Sacos:40,Usuario:'operador1@alba.com',Motivo:'Ingreso inicial a custodia',Observaciones:''},
+    {ID_Movimiento:'CMV-000002',Fecha:'2026-05-30 10:00',ID_Custodia:'CUS-2026-0002',Tipo_Movimiento:'Ingreso',Cantidad_kg:1200,Sacos:30,Usuario:'operador2@alba.com',Motivo:'Ingreso inicial a custodia',Observaciones:''},
+    {ID_Movimiento:'CMV-000003',Fecha:'2026-07-05 11:30',ID_Custodia:'CUS-2026-0002',Tipo_Movimiento:'Retiro',Cantidad_kg:-500,Sacos:-13,Usuario:'operador2@alba.com',Motivo:'Retiro parcial autorizado por el depositante',Observaciones:''},
   ],
   auditoria:[
     {ID:1,Fecha:'2026-07-10 08:00:00',Usuario:'admin@alba.com',Accion:'Login',Detalle:'Inicio de sesión exitoso'},
@@ -572,10 +757,17 @@ function isConsulta(){ return S.user && S.user.Rol==='Consulta'; }
 function canWrite(){ return S.user && S.user.Rol!=='Consulta'; }
 
 /* ---------- badges ---------- */
-function tipoClass(t){ const m={'Maíz':'maiz','Caraota':'caraota','Sorgo':'sorgo','Soya':'soya'}; return m[t]||'otra'; }
+function tipoClass(t){ const m={'Maíz':'maiz','Caraota':'caraota','Sorgo':'sorgo','Soya':'soya','Pasto':'pasto','Girasol':'girasol'}; return m[t]||'otra'; }
 function seedBadge(t){ return `<span class="seed-badge tipo-${tipoClass(t)}"><span class="dot"></span>${esc(t||'—')}</span>`; }
-function estadoClass(e){ if(e==='Apto para Semilla') return 'ok'; if(e==='Cuarentena') return 'warn'; if(e==='Solo Consumo') return 'info'; if(e==='Rechazado'||e==='Agotado'||e==='Anulada') return 'bad'; return 'mute'; }
+function estadoClass(e){ if(e==='Apto para Semilla') return 'ok'; if(e==='Cuarentena') return 'warn'; if(e==='Solo Consumo') return 'info'; if(e==='Rechazado'||e==='Agotado'||e==='Anulada') return 'bad'; if(e==='Dividido') return 'mute'; return 'mute'; }
 function stBadge(e){ return `<span class="st-badge ${estadoClass(e)}">${esc(e||'—')}</span>`; }
+function estadoCustodiaClass(e){ if(e==='En custodia') return 'ok'; if(e==='Retirado') return 'mute'; return 'mute'; }
+function stBadgeCustodia(e){ return `<span class="st-badge ${estadoCustodiaClass(e)}">${esc(e||'—')}</span>`; }
+function fmtCantidadCustodia(r,kg,sacos){
+  const k = kg===undefined? r.Cantidad_Actual_kg : kg;
+  const s = sacos===undefined? r.Cantidad_Sacos_Actual : sacos;
+  return fmtKg(k)+' kg'+(num(s)>0?' · '+fmtKg(s)+' sacos':'');
+}
 
 /* ======================= ESTADO GLOBAL ======================= */
 const S = { DB:{}, user:null, view:'dashboard', online:false, sub:{} };
@@ -588,7 +780,8 @@ const API = {
       const r = await fetch(CONFIG.API_URL+'?action=bootstrap');
       const j = await r.json();
       S.DB = { usuarios:j.usuarios||[], lotes:j.lotes||[], movimientos:j.movimientos||[], secado:j.secado||[],
-                germinacion:j.germinacion||[], notas:j.notas||[], detalle:j.detalle||[], auditoria:j.auditoria||[] };
+                germinacion:j.germinacion||[], notas:j.notas||[], detalle:j.detalle||[], auditoria:j.auditoria||[],
+                custodia:j.custodia||[], custodiaMovimientos:j.custodiaMovimientos||[] };
       S.online = true;
     }catch(e){ console.error(e); S.DB=JSON.parse(JSON.stringify(SEED)); S.online=false; toast('Sin conexión al servidor — modo demo local',true); }
   },
@@ -651,6 +844,102 @@ async function crearLote(lote){
   S.DB.movimientos.push(mov);
   auditLocal(lote.Registrado_Por,'Recepción de lote',lote.ID_Lote+' · '+lote.Tipo_Semilla+' · '+fmtCantidadKg(lote,stockInicial));
   return lote;
+}
+
+/* ---------- DIVISIÓN DE LOTES (ej. separar semilla / consumo) ---------- */
+async function dividirLote(payload){
+  if(S.online){
+    const r = await API.post(Object.assign({action:'dividirLote'},payload));
+    if(r&&r.ok){ await API.bootstrap(); return r; }
+    toast(r&&r.error?r.error:'No se pudo dividir el lote',true); return null;
+  }
+  const loteOrig = loteById(payload.idLoteOriginal);
+  if(!loteOrig){ toast('Lote no encontrado',true); return null; }
+  const stockActual = num(loteOrig.Stock_Actual_kg);
+  if(Math.abs((payload.cantidad1_kg+payload.cantidad2_kg)-stockActual)>0.01){
+    toast('La suma debe ser igual al stock actual ('+fmtKg(stockActual)+' kg)',true); return null;
+  }
+  const prefix = CONFIG.PREFIJOS[loteOrig.Tipo_Semilla]||'OT';
+
+  const lote1=Object.assign({},loteOrig);
+  lote1.ID_Lote=nextSeqLocal(S.DB.lotes,'ID_Lote',prefix,4,true);
+  lote1.Stock_Actual_kg=round2(payload.cantidad1_kg);
+  lote1.Peso_Neto_Recepcion_kg=round2(payload.cantidad1_kg);
+  lote1.Peso_Bruto_Recibido_kg=round2(payload.cantidad1_kg);
+  lote1.Destino=payload.destino1;
+  lote1.Lote_Origen=loteOrig.ID_Lote;
+  lote1.Fecha_Recepcion=nowStamp();
+  lote1.Registrado_Por=payload.usuario;
+  lote1.Observaciones=(loteOrig.Observaciones?loteOrig.Observaciones+' · ':'')+'División de '+loteOrig.ID_Lote;
+  S.DB.lotes.push(lote1);
+
+  const lote2=Object.assign({},loteOrig);
+  lote2.ID_Lote=nextSeqLocal(S.DB.lotes,'ID_Lote',prefix,4,true);
+  lote2.Stock_Actual_kg=round2(payload.cantidad2_kg);
+  lote2.Peso_Neto_Recepcion_kg=round2(payload.cantidad2_kg);
+  lote2.Peso_Bruto_Recibido_kg=round2(payload.cantidad2_kg);
+  lote2.Destino=payload.destino2;
+  lote2.Lote_Origen=loteOrig.ID_Lote;
+  lote2.Fecha_Recepcion=nowStamp();
+  lote2.Registrado_Por=payload.usuario;
+  lote2.Observaciones=(loteOrig.Observaciones?loteOrig.Observaciones+' · ':'')+'División de '+loteOrig.ID_Lote;
+  S.DB.lotes.push(lote2);
+
+  const mov1={ID_Movimiento:nextSeqLocal(S.DB.movimientos,'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:lote1.ID_Lote,Tipo_Movimiento:'División',Cantidad_kg:round2(payload.cantidad1_kg),ID_Nota:'',Motivo:'División de '+loteOrig.ID_Lote+' → '+payload.destino1,Usuario:payload.usuario,Observaciones:payload.motivo||''};
+  const mov2={ID_Movimiento:nextSeqLocal(S.DB.movimientos.concat([mov1]),'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:lote2.ID_Lote,Tipo_Movimiento:'División',Cantidad_kg:round2(payload.cantidad2_kg),ID_Nota:'',Motivo:'División de '+loteOrig.ID_Lote+' → '+payload.destino2,Usuario:payload.usuario,Observaciones:payload.motivo||''};
+  const movOrig={ID_Movimiento:nextSeqLocal(S.DB.movimientos.concat([mov1,mov2]),'ID_Movimiento','MOV',6,false),Fecha:nowStamp(),ID_Lote:loteOrig.ID_Lote,Tipo_Movimiento:'División',Cantidad_kg:-round2(stockActual),ID_Nota:'',Motivo:'Repartido en '+lote1.ID_Lote+' y '+lote2.ID_Lote,Usuario:payload.usuario,Observaciones:payload.motivo||''};
+  S.DB.movimientos.push(mov1,mov2,movOrig);
+
+  recomputeStockLocal(lote1.ID_Lote); recomputeStockLocal(lote2.ID_Lote); recomputeStockLocal(loteOrig.ID_Lote);
+  loteOrig.Estado='Dividido';
+
+  auditLocal(payload.usuario,'División de lote',loteOrig.ID_Lote+' → '+lote1.ID_Lote+' ('+fmtKg(lote1.Stock_Actual_kg)+' kg · '+payload.destino1+') + '+lote2.ID_Lote+' ('+fmtKg(lote2.Stock_Actual_kg)+' kg · '+payload.destino2+')');
+  return {ok:true, lotes:[lote1,lote2]};
+}
+
+/* ---------- ALMACENAMIENTO DE TERCEROS (CUSTODIA) ---------- */
+function custodiaById(id){ return (S.DB.custodia||[]).find(c=>c.ID_Custodia===id); }
+function movimientosDeCustodia(id){ return (S.DB.custodiaMovimientos||[]).filter(m=>m.ID_Custodia===id).sort((a,b)=>(parseD(b.Fecha)||0)-(parseD(a.Fecha)||0)); }
+
+async function ingresoCustodia(payload){
+  if(S.online){
+    const r = await API.post(Object.assign({action:'registrarIngresoCustodia'},payload));
+    if(r&&r.ok){ await API.bootstrap(); return r.custodia; }
+    toast(r&&r.error?r.error:'No se pudo registrar el ingreso a custodia',true); return null;
+  }
+  const c={
+    ID_Custodia:nextSeqLocal(S.DB.custodia||[],'ID_Custodia','CUS',4,true),
+    Depositante:payload.Depositante, Cedula_RIF:payload.Cedula_RIF||'', Telefono:payload.Telefono||'',
+    Tipo_Semilla:payload.Tipo_Semilla, Variedad:payload.Variedad||'',
+    Cantidad_Inicial_kg:round2(payload.Cantidad_kg), Cantidad_Actual_kg:round2(payload.Cantidad_kg),
+    Cantidad_Sacos_Inicial:round2(payload.Cantidad_Sacos||0), Cantidad_Sacos_Actual:round2(payload.Cantidad_Sacos||0),
+    Peso_Por_Saco_kg:round2(payload.Peso_Por_Saco_kg||50),
+    Fecha_Ingreso:payload.Fecha_Ingreso||todayISO(), Estado:'En custodia',
+    Registrado_Por:payload.usuario, Observaciones:payload.Observaciones||''
+  };
+  S.DB.custodia = S.DB.custodia||[]; S.DB.custodiaMovimientos = S.DB.custodiaMovimientos||[];
+  S.DB.custodia.push(c);
+  S.DB.custodiaMovimientos.push({ID_Movimiento:nextSeqLocal(S.DB.custodiaMovimientos,'ID_Movimiento','CMV',6,false),Fecha:nowStamp(),ID_Custodia:c.ID_Custodia,Tipo_Movimiento:'Ingreso',Cantidad_kg:c.Cantidad_Inicial_kg,Sacos:c.Cantidad_Sacos_Inicial,Usuario:payload.usuario,Motivo:'Ingreso inicial a custodia',Observaciones:''});
+  auditLocal(payload.usuario,'Ingreso a custodia de terceros',c.ID_Custodia+' · '+c.Depositante+' · '+fmtCantidadCustodia(c)+' de '+c.Tipo_Semilla);
+  return c;
+}
+async function retiroCustodia(payload){
+  if(S.online){
+    const r = await API.post(Object.assign({action:'registrarRetiroCustodia'},payload));
+    if(r&&r.ok){ await API.bootstrap(); return true; }
+    toast(r&&r.error?r.error:'No se pudo registrar el retiro',true); return false;
+  }
+  const c=custodiaById(payload.idCustodia);
+  if(!c){ toast('Registro de custodia no encontrado',true); return false; }
+  const kg=round2(payload.cantidad_kg);
+  const sacos=round2(payload.sacos||0);
+  if(kg<=0||kg>num(c.Cantidad_Actual_kg)+0.001){ toast('La cantidad a retirar no puede superar el saldo actual ('+fmtKg(c.Cantidad_Actual_kg)+' kg)',true); return false; }
+  c.Cantidad_Actual_kg = round2(num(c.Cantidad_Actual_kg)-kg);
+  c.Cantidad_Sacos_Actual = Math.max(0,round2(num(c.Cantidad_Sacos_Actual)-sacos));
+  c.Estado = c.Cantidad_Actual_kg<=0.009 ? 'Retirado' : 'En custodia';
+  S.DB.custodiaMovimientos.push({ID_Movimiento:nextSeqLocal(S.DB.custodiaMovimientos,'ID_Movimiento','CMV',6,false),Fecha:nowStamp(),ID_Custodia:c.ID_Custodia,Tipo_Movimiento:'Retiro',Cantidad_kg:-kg,Sacos:-sacos,Usuario:payload.usuario,Motivo:payload.motivo||'Retiro autorizado por el depositante',Observaciones:''});
+  auditLocal(payload.usuario,'Retiro de custodia de terceros',c.ID_Custodia+' · '+c.Depositante+' · '+fmtCantidadCustodia(c,kg,sacos)+' retirados · saldo '+fmtCantidadCustodia(c));
+  return true;
 }
 
 /* ---------- MOVIMIENTOS (ajuste / devolución / entrada extra) ---------- */
@@ -805,6 +1094,7 @@ function closeSidebar(){ $('#sidebar').classList.remove('open'); $('#backdrop').
 const NAV = [
   {key:'dashboard',label:'Panel',icon:'grid',roles:['Administrador','Operador','Consulta']},
   {key:'lotes',label:'Lotes e inventario',icon:'package',roles:['Administrador','Operador','Consulta']},
+  {key:'custodia',label:'Almacenamiento de terceros',icon:'lock',roles:['Administrador','Operador','Consulta']},
   {key:'secado',label:'Secado de caraota',icon:'droplet',roles:['Administrador','Operador']},
   {key:'movimientos',label:'Movimientos',icon:'shuffle',roles:['Administrador','Operador','Consulta']},
   {key:'notas',label:'Notas de salida',icon:'filetext',roles:['Administrador','Operador','Consulta']},
@@ -818,6 +1108,7 @@ const NAV_ADMIN = [
 const PAGE_META = {
   dashboard:{title:'Panel',crumb:'alba / panel'},
   lotes:{title:'Lotes e inventario',crumb:'alba / lotes'},
+  custodia:{title:'Almacenamiento de terceros',crumb:'alba / custodia'},
   secado:{title:'Secado y limpieza de caraota',crumb:'alba / secado'},
   movimientos:{title:'Movimientos de almacén',crumb:'alba / movimientos'},
   notas:{title:'Notas de salida',crumb:'alba / notas'},
@@ -857,6 +1148,7 @@ function renderView(){
   const c=$('#content'); c.innerHTML='';
   if(S.view==='dashboard') return renderDashboard(c);
   if(S.view==='lotes') return renderLotes(c);
+  if(S.view==='custodia') return renderCustodiaView(c);
   if(S.view==='secado') return renderSecadoView(c);
   if(S.view==='movimientos') return renderMovimientos(c);
   if(S.view==='notas') return renderNotasView(c);
@@ -885,7 +1177,7 @@ function siloViz(tipo,kg,max,label){
   </div>`;
 }
 function renderDashboard(c){
-  const lotesActivos = S.DB.lotes.filter(l=>l.Estado!=='Agotado').length;
+  const lotesActivos = S.DB.lotes.filter(l=>l.Estado!=='Agotado'&&l.Estado!=='Dividido').length;
   const stock = stockTotal();
   const cuarentena = lotesEnCuarentena();
   const notasMes = S.DB.notas.filter(n=>esteMes(n.Fecha)&&n.Estado!=='Anulada').length;
@@ -893,6 +1185,7 @@ function renderDashboard(c){
   const germPend = germinacionesPendientes();
   const porTipo = stockPorTipo();
   const maxTipo = Math.max(1,...Object.values(porTipo));
+  const custodiaKg = (S.DB.custodia||[]).filter(r=>r.Estado==='En custodia').reduce((s,r)=>s+num(r.Cantidad_Actual_kg),0);
 
   const alertas=[];
   cuarentena.forEach(l=>alertas.push({tipo:'warn',tit:`Lote ${l.ID_Lote} en cuarentena`,sub:`${l.Tipo_Semilla} · ${l.Variedad||'—'} · ${fmtCantidadLote(l)}`}));
@@ -908,6 +1201,7 @@ function renderDashboard(c){
       ${kpi('En cuarentena',cuarentena.length,'alerttriangle','var(--warn)')}
       ${kpi('Notas este mes',notasMes,'filetext','var(--otra)')}
       ${kpi('Despachado este mes','<span class="mono">'+fmtKg(kgDespachadosMes)+'</span> <small>kg</small>','truck','var(--caraota)')}
+      ${kpi('En custodia de terceros','<span class="mono">'+fmtKg(custodiaKg)+'</span> <small>kg</small>','lock','var(--otra)')}
     </div>
     <div class="card" style="margin-bottom:22px">
       <div class="card-head">
@@ -945,7 +1239,7 @@ function renderLotes(c){
   S.sub.filtroEstado = S.sub.filtroEstado || 'Todos';
   S.sub.busqueda = S.sub.busqueda || '';
   const tipos=['Todos',...CONFIG.TIPOS_SEMILLA];
-  const estados=['Todos','Cuarentena','Apto para Semilla','Solo Consumo','Rechazado','Agotado'];
+  const estados=['Todos','Cuarentena','Apto para Semilla','Solo Consumo','Rechazado','Agotado','Dividido'];
 
   let lotes=[...S.DB.lotes];
   if(S.sub.filtroTipo!=='Todos') lotes=lotes.filter(l=>l.Tipo_Semilla===S.sub.filtroTipo);
@@ -961,6 +1255,7 @@ function renderLotes(c){
         ${estados.map(e=>`<option value="${esc(e)}" ${S.sub.filtroEstado===e?'selected':''}>${e==='Todos'?'Todos los estados':e}</option>`).join('')}
       </select>
       <div class="spacer"></div>
+      ${canWrite()?`<button class="btn btn-ghost" id="btnRubros">${ic('sprout')} Rubros</button>`:''}
       ${canWrite()?`<button class="btn btn-primary" id="btnNuevoLote">${ic('plus')} Nuevo lote</button>`:''}
     </div>
     <div class="card">
@@ -986,6 +1281,245 @@ function renderLotes(c){
   $('#buscarLote').oninput=debounce(e=>{ S.sub.busqueda=e.target.value; renderView(); const inp=$('#buscarLote'); if(inp) setCaretEnd(inp); },260);
   $$('tr.row-link').forEach(tr=>tr.onclick=()=>abrirPasaporte(tr.dataset.id));
   if($('#btnNuevoLote')) $('#btnNuevoLote').onclick=()=>abrirModalNuevoLote();
+  if($('#btnRubros')) $('#btnRubros').onclick=()=>abrirModalRubros();
+}
+
+/* ======================= ALMACENAMIENTO DE TERCEROS (CUSTODIA) ======================= */
+function renderCustodiaView(c){
+  S.sub.custFiltroEstado = S.sub.custFiltroEstado || 'Todos';
+  S.sub.custBusqueda = S.sub.custBusqueda || '';
+  const estados=['Todos','En custodia','Retirado'];
+  let regs=[...(S.DB.custodia||[])];
+  if(S.sub.custFiltroEstado!=='Todos') regs=regs.filter(r=>r.Estado===S.sub.custFiltroEstado);
+  if(S.sub.custBusqueda){ const q=S.sub.custBusqueda.toLowerCase(); regs=regs.filter(r=>[r.ID_Custodia,r.Depositante,r.Tipo_Semilla,r.Variedad,r.Cedula_RIF].some(v=>String(v||'').toLowerCase().includes(q))); }
+  regs.sort((a,b)=>(parseD(b.Fecha_Ingreso)||0)-(parseD(a.Fecha_Ingreso)||0));
+
+  const activos=(S.DB.custodia||[]).filter(r=>r.Estado==='En custodia');
+  const kgTotal=activos.reduce((s,r)=>s+num(r.Cantidad_Actual_kg),0);
+  const depositantes=new Set(activos.map(r=>r.Depositante)).size;
+
+  c.innerHTML=`
+    <div class="mini-note" style="margin-bottom:18px">${ic('lock')} Semilla que <b>no es propiedad del almacén</b> — la guardas para terceros como servicio de almacenamiento. No afecta tu stock propio ni las notas de salida.</div>
+    <div class="kpi-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px">
+      ${kpi('Kg en custodia (activo)',fmtKg(kgTotal)+' kg','lock','var(--otra)')}
+      ${kpi('Depositantes activos',depositantes,'users','var(--maiz-lt)')}
+      ${kpi('Registros totales',(S.DB.custodia||[]).length,'clipboardcheck','var(--soya)')}
+    </div>
+    <div class="toolbar">
+      <div class="search-box">${ic('search')}<input id="buscarCustodia" placeholder="Buscar por depositante, semilla, cédula/RIF..." value="${esc(S.sub.custBusqueda)}"></div>
+      <select id="selEstadoCustodia" style="width:auto;padding:8px 30px 8px 12px;border-radius:20px;border:1.5px solid var(--linea-strong);background:rgba(15,18,32,.025);color:var(--texto);font-size:12.5px">
+        ${estados.map(e=>`<option value="${esc(e)}" ${S.sub.custFiltroEstado===e?'selected':''}>${e==='Todos'?'Todos los estados':e}</option>`).join('')}
+      </select>
+      <div class="spacer"></div>
+      ${canWrite()?`<button class="btn btn-primary" id="btnNuevaCustodia">${ic('plus')} Nuevo ingreso</button>`:''}
+    </div>
+    <div class="card">
+      <div class="tbl-wrap">
+      ${regs.length?`<table class="tbl"><thead><tr>
+        <th>Depositante</th><th>Semilla</th><th>Variedad</th><th>Desde</th><th class="num">Cantidad actual</th><th>Estado</th><th></th>
+      </tr></thead><tbody>
+        ${regs.map(r=>`<tr class="row-link" data-id="${esc(r.ID_Custodia)}">
+          <td><b>${esc(r.Depositante)}</b><div style="font-size:11px;color:var(--faint)">${esc(r.ID_Custodia)}</div></td>
+          <td>${seedBadge(r.Tipo_Semilla)}</td>
+          <td>${esc(r.Variedad||'—')}</td>
+          <td>${fmtD(r.Fecha_Ingreso)}</td>
+          <td class="num">${fmtCantidadCustodia(r)} <span style="color:var(--faint);font-size:11px">/ ${fmtKg(r.Cantidad_Inicial_kg)} kg${num(r.Cantidad_Sacos_Inicial)>0?' · '+fmtKg(r.Cantidad_Sacos_Inicial)+' sacos':''}</span></td>
+          <td>${stBadgeCustodia(r.Estado)}</td>
+          <td>${ic('chevronright')}</td>
+        </tr>`).join('')}
+      </tbody></table>`:`<div class="empty-state">${ic('lock','ic-lg')}<b>Sin registros de custodia</b>Registra el primer ingreso de semilla de un tercero.</div>`}
+      </div>
+    </div>`;
+  $('#selEstadoCustodia').onchange=e=>{ S.sub.custFiltroEstado=e.target.value; renderView(); };
+  $('#buscarCustodia').oninput=debounce(e=>{ S.sub.custBusqueda=e.target.value; renderView(); const inp=$('#buscarCustodia'); if(inp) setCaretEnd(inp); },260);
+  $$('tr.row-link').forEach(tr=>tr.onclick=()=>abrirDetalleCustodia(tr.dataset.id));
+  if($('#btnNuevaCustodia')) $('#btnNuevaCustodia').onclick=()=>abrirModalNuevaCustodia();
+}
+
+function abrirModalNuevaCustodia(){
+  if(!canWrite()) return;
+  const html=`
+    <div class="modal-head"><div><h3>${ic('lock')} Nuevo ingreso a custodia</h3><div class="sub">Registra semilla de un tercero que se guarda como servicio de almacenamiento</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Depositante (dueño de la semilla)</label><input id="cuDepositante" placeholder="Nombre o razón social"></div>
+        <div class="field"><label>Cédula / RIF</label><input id="cuCedula" placeholder="V-00.000.000 o J-00000000-0"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Teléfono</label><input id="cuTelefono" placeholder="Opcional"></div>
+        <div class="field"><label>Fecha de ingreso</label><input id="cuFecha" type="date" value="${todayISO()}"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Tipo de semilla <a href="javascript:void(0)" id="cuAgregarRubro" style="text-transform:none;font-weight:600;color:var(--maiz-lt);letter-spacing:0">+ agregar rubro nuevo</a></label><select id="cuTipo">${CONFIG.TIPOS_SEMILLA.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
+        <div class="field"><label>Variedad</label><input id="cuVariedad" placeholder="Opcional"></div>
+      </div>
+      <div class="grid3">
+        <div class="field"><label>Cantidad de sacos</label><input id="cuSacos" type="number" min="0" step="1" placeholder="Opcional"></div>
+        <div class="field"><label>Peso por saco (kg)</label><input id="cuPesoSaco" type="number" min="0" step="0.01" value="50"></div>
+        <div class="field"><label>Cantidad total (kg)</label><input id="cuCantidad" type="number" min="0" step="0.01" placeholder="0"></div>
+      </div>
+      <div class="mini-note" style="margin-bottom:14px">${ic('info')} Puedes registrar por sacos, por kilos, o los dos — si indicas sacos, el total en kg se calcula solo (y lo puedes ajustar a mano después).</div>
+      <div class="field"><label>Observaciones</label><textarea id="cuObs" placeholder="Condiciones del acuerdo, referencia, etc."></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="cuGuardar">${ic('checkcircle')} Registrar ingreso</button></div>`;
+  openModal(html);
+  if($('#cuAgregarRubro')) $('#cuAgregarRubro').onclick=()=>abrirModalRubros();
+  const cuSacos=$('#cuSacos'), cuPesoSaco=$('#cuPesoSaco'), cuCantidad=$('#cuCantidad');
+  const recalcCu=()=>{ const s=num(cuSacos.value); if(s>0) cuCantidad.value=round2(s*num(cuPesoSaco.value)); };
+  cuSacos.oninput=recalcCu; cuPesoSaco.oninput=recalcCu;
+  $('#cuGuardar').onclick=async()=>{
+    const depositante=$('#cuDepositante').value.trim();
+    const kg=num(cuCantidad.value);
+    if(!depositante){ toast('Indica el nombre del depositante',true); return; }
+    if(kg<=0){ toast('Indica la cantidad ingresada (en kg o en sacos)',true); return; }
+    const payload={
+      Depositante:depositante, Cedula_RIF:$('#cuCedula').value.trim(), Telefono:$('#cuTelefono').value.trim(),
+      Tipo_Semilla:$('#cuTipo').value, Variedad:$('#cuVariedad').value.trim(), Cantidad_kg:kg,
+      Cantidad_Sacos:num(cuSacos.value), Peso_Por_Saco_kg:num(cuPesoSaco.value)||50,
+      Fecha_Ingreso:$('#cuFecha').value||todayISO(), Observaciones:$('#cuObs').value.trim(), usuario:S.user.Email
+    };
+    $('#cuGuardar').disabled=true; $('#cuGuardar').textContent='Guardando...';
+    const creado=await ingresoCustodia(payload);
+    if(creado){ closeModal(); toast('Ingreso '+creado.ID_Custodia+' registrado'); renderView(); abrirDetalleCustodia(creado.ID_Custodia); }
+    else { $('#cuGuardar').disabled=false; $('#cuGuardar').innerHTML=ic('checkcircle')+' Registrar ingreso'; }
+  };
+}
+
+function abrirDetalleCustodia(id){
+  const r=custodiaById(id); if(!r) return;
+  const movs=movimientosDeCustodia(id);
+  const html=`
+    <div class="modal-head"><div><h3>${esc(r.Depositante)}</h3><div class="sub">${esc(r.ID_Custodia)} · ${esc(r.Tipo_Semilla)}${r.Variedad?' · '+esc(r.Variedad):''}</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
+    <div class="modal-body">
+      <div class="detail-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:18px">
+        <div class="detail-item" style="padding:12px;background:var(--panel-2);border-radius:var(--r-sm);font-size:13px"><strong style="display:block;color:var(--faint);font-size:11px;text-transform:uppercase;margin-bottom:4px">Cédula / RIF</strong>${esc(r.Cedula_RIF||'—')}</div>
+        <div class="detail-item" style="padding:12px;background:var(--panel-2);border-radius:var(--r-sm);font-size:13px"><strong style="display:block;color:var(--faint);font-size:11px;text-transform:uppercase;margin-bottom:4px">Teléfono</strong>${esc(r.Telefono||'—')}</div>
+        <div class="detail-item" style="padding:12px;background:var(--panel-2);border-radius:var(--r-sm);font-size:13px"><strong style="display:block;color:var(--faint);font-size:11px;text-transform:uppercase;margin-bottom:4px">Desde</strong>${fmtD(r.Fecha_Ingreso)}</div>
+        <div class="detail-item" style="padding:12px;background:var(--panel-2);border-radius:var(--r-sm);font-size:13px"><strong style="display:block;color:var(--faint);font-size:11px;text-transform:uppercase;margin-bottom:4px">Estado</strong>${stBadgeCustodia(r.Estado)}</div>
+      </div>
+      <div class="res-row total" style="padding:12px 16px;background:var(--panel-2);border-radius:var(--r-sm);margin-bottom:16px">
+        <span class="l">Cantidad actual en custodia</span><span class="v">${fmtCantidadCustodia(r)} <span style="font-size:13px;color:var(--faint);font-family:inherit">de ${fmtKg(r.Cantidad_Inicial_kg)} kg${num(r.Cantidad_Sacos_Inicial)>0?' · '+fmtKg(r.Cantidad_Sacos_Inicial)+' sacos':''} ingresados</span></span>
+      </div>
+      ${r.Observaciones?`<div class="mini-note" style="margin-bottom:16px">${ic('info')} ${esc(r.Observaciones)}</div>`:''}
+      <div class="section-title">Movimientos</div>
+      ${movs.length?`<div class="tbl-wrap"><table class="tbl"><thead><tr><th>Fecha</th><th>Tipo</th><th class="num">Kg</th><th class="num">Sacos</th><th>Motivo</th></tr></thead><tbody>
+        ${movs.map(m=>`<tr><td>${fmtDT(m.Fecha)}</td><td>${esc(m.Tipo_Movimiento)}</td><td class="num" style="color:${num(m.Cantidad_kg)<0?'var(--bad-lt)':'var(--ok-lt)'}">${num(m.Cantidad_kg)>0?'+':''}${fmtKg(m.Cantidad_kg)}</td><td class="num" style="color:${num(m.Sacos)<0?'var(--bad-lt)':'var(--ok-lt)'}">${num(m.Sacos)?(num(m.Sacos)>0?'+':'')+fmtKg(m.Sacos):'—'}</td><td>${esc(m.Motivo||'—')}</td></tr>`).join('')}
+      </tbody></table></div>`:`<div class="empty-state" style="padding:20px">Sin movimientos registrados.</div>`}
+    </div>
+    <div class="modal-foot">
+      <button class="btn btn-outline" id="custComprobante">${ic('printer')} Imprimir comprobante</button>
+      ${canWrite()&&r.Estado==='En custodia'?`<button class="btn btn-ghost" id="custRetirar">${ic('shuffle')} Registrar retiro</button>`:''}
+      <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
+    </div>`;
+  openModal(html,{wide:true});
+  $('#custComprobante').onclick=()=>imprimirComprobanteCustodia(r);
+  if($('#custRetirar')) $('#custRetirar').onclick=()=>{ closeModal(); abrirModalRetiroCustodia(r.ID_Custodia); };
+}
+
+function abrirModalRetiroCustodia(id){
+  const r=custodiaById(id); if(!r) return;
+  const pesoSaco=num(r.Peso_Por_Saco_kg)||50;
+  const html=`
+    <div class="modal-head"><div><h3>${ic('shuffle')} Retiro de custodia — ${esc(r.Depositante)}</h3><div class="sub">Saldo actual: ${fmtCantidadCustodia(r)}</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
+    <div class="modal-body">
+      <div class="grid2">
+        <div class="field"><label>Sacos a retirar</label><input id="rcSacos" type="number" min="0" step="1" value="${num(r.Cantidad_Sacos_Actual)||''}" placeholder="Opcional"></div>
+        <div class="field"><label>Kg a retirar</label><input id="rcCantidad" type="number" min="0" step="0.01" value="${r.Cantidad_Actual_kg}"></div>
+      </div>
+      <div class="mini-note" style="margin-bottom:14px">${ic('info')} Si indicas sacos, el kg se recalcula solo (peso por saco registrado: ${fmtKg(pesoSaco)} kg). Si retiras el total, el registro pasa a estado "Retirado".</div>
+      <div class="field"><label>Motivo / responsable que retira</label><input id="rcMotivo" placeholder="Ej. Retiro autorizado por el depositante"></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="rcGuardar">${ic('checkcircle')} Confirmar retiro</button></div>`;
+  openModal(html);
+  const rcSacos=$('#rcSacos'), rcCantidad=$('#rcCantidad');
+  rcSacos.oninput=()=>{ const s=num(rcSacos.value); if(s>0) rcCantidad.value=round2(Math.min(s*pesoSaco,r.Cantidad_Actual_kg)); };
+  $('#rcGuardar').onclick=async()=>{
+    const kg=num(rcCantidad.value);
+    const sacos=num(rcSacos.value);
+    if(kg<=0){ toast('Indica la cantidad a retirar',true); return; }
+    if(kg>num(r.Cantidad_Actual_kg)+0.001){ toast('No puede superar el saldo actual ('+fmtCantidadCustodia(r)+')',true); return; }
+    if(sacos>num(r.Cantidad_Sacos_Actual)+0.001){ toast('No puede superar los sacos disponibles ('+fmtKg(r.Cantidad_Sacos_Actual)+')',true); return; }
+    $('#rcGuardar').disabled=true; $('#rcGuardar').textContent='Guardando...';
+    const ok=await retiroCustodia({idCustodia:r.ID_Custodia,cantidad_kg:kg,sacos:sacos,motivo:$('#rcMotivo').value.trim(),usuario:S.user.Email});
+    if(ok){ closeModal(); toast('Retiro registrado'); renderView(); }
+    else { $('#rcGuardar').disabled=false; $('#rcGuardar').innerHTML=ic('checkcircle')+' Confirmar retiro'; }
+  };
+}
+
+function custodiaQRText(r){
+  const L=[];
+  L.push('ALMACÉN LEGUMINOSAS DEL ALBA — CUSTODIA');
+  L.push('Registro: '+r.ID_Custodia);
+  L.push('Depositante: '+r.Depositante+(r.Cedula_RIF?' · '+r.Cedula_RIF:''));
+  L.push('Semilla: '+r.Tipo_Semilla+(r.Variedad?' · '+r.Variedad:''));
+  L.push('Cantidad actual: '+fmtCantidadCustodia(r)+' (de '+fmtKg(r.Cantidad_Inicial_kg)+' kg'+(num(r.Cantidad_Sacos_Inicial)>0?' · '+fmtKg(r.Cantidad_Sacos_Inicial)+' sacos':'')+' ingresados)');
+  L.push('Desde: '+fmtD(r.Fecha_Ingreso));
+  L.push('Estado: '+r.Estado);
+  return L.join('\n');
+}
+
+function imprimirComprobanteCustodia(r){
+  const w=window.open('','_blank');
+  if(!w){ toast('Habilita las ventanas emergentes para imprimir',true); return; }
+  const qrText=JSON.stringify(custodiaQRText(r));
+  w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Custodia ${esc(r.ID_Custodia)}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+<style>
+  :root{--banda:#16281F;--oro:#F2B341;--oroDk:#B45309;--crema:#F6F3E9;--texto:#1B1E14;--mute:#6B7280;--linea:#E7E5DC;}
+  *{box-sizing:border-box}
+  body{font-family:'IBM Plex Sans',Arial,sans-serif;color:var(--texto);margin:0;padding:0;background:#EDEDE5}
+  .sheet{max-width:640px;margin:26px auto;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.12);border-radius:6px;overflow:hidden}
+  .banda{background:linear-gradient(135deg,#1D3327,var(--banda) 65%);color:#fff;padding:26px 36px 22px;display:flex;justify-content:space-between;align-items:flex-start}
+  .brand{display:flex;align-items:center;gap:13px}
+  .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(155deg,var(--oro),var(--oroDk));display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:19px;color:#241900}
+  .brand h1{font-family:'Space Grotesk',sans-serif;font-size:15.5px;margin:0 0 3px}
+  .brand .tagline{font-size:9.5px;letter-spacing:.13em;text-transform:uppercase;color:var(--oro);font-weight:600}
+  .folio{text-align:right}
+  .folio .lab{font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#AEB8A8;margin-bottom:4px}
+  .folio .num{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700;color:#fff}
+  .cuerpo{padding:26px 36px 30px}
+  .card{background:var(--crema);border-radius:10px;padding:16px 18px;border:1px solid var(--linea);margin-bottom:16px}
+  .kv{display:flex;justify-content:space-between;font-size:12.5px;padding:4.5px 0;border-bottom:1px dashed var(--linea)}
+  .kv:last-child{border-bottom:none}
+  .kv span{color:var(--mute)} .kv b{color:var(--texto)}
+  .total-box{background:var(--banda);color:#fff;border-radius:9px;padding:14px 20px;text-align:center;margin-bottom:20px}
+  .total-box .l{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--oro);margin-bottom:3px}
+  .total-box .v{font-family:'Space Grotesk',sans-serif;font-size:24px;font-weight:700}
+  .qr-row{display:flex;justify-content:center;flex-direction:column;align-items:center;gap:6px;margin-top:10px}
+  .qr-row .lab{font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute)}
+  .pie{padding:14px 36px 20px;border-top:1px solid var(--linea);font-size:9px;color:#9CA3AF;text-align:center}
+  .toolbar-print{max-width:640px;margin:14px auto 0;display:flex;justify-content:flex-end}
+  .toolbar-print button{font-family:inherit;font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:8px;border:1px solid var(--banda);background:var(--banda);color:#fff;cursor:pointer}
+  @media print{ body{background:#fff} .sheet{box-shadow:none;margin:0;max-width:100%;border-radius:0} .toolbar-print{display:none} @page{margin:14mm} }
+</style></head><body>
+<div class="toolbar-print"><button onclick="window.print()">Imprimir / Guardar PDF</button></div>
+<div class="sheet">
+  <div class="banda">
+    <div class="brand"><div class="logo">A</div><div><h1>Almacén Leguminosas del Alba</h1><div class="tagline">Comprobante de custodia de semilla</div></div></div>
+    <div class="folio"><div class="lab">Registro</div><div class="num">${esc(r.ID_Custodia)}</div></div>
+  </div>
+  <div class="cuerpo">
+    <div class="card">
+      <div class="kv"><span>Depositante</span><b>${esc(r.Depositante)}</b></div>
+      <div class="kv"><span>Cédula / RIF</span><b>${esc(r.Cedula_RIF||'—')}</b></div>
+      <div class="kv"><span>Teléfono</span><b>${esc(r.Telefono||'—')}</b></div>
+      <div class="kv"><span>Semilla</span><b>${esc(r.Tipo_Semilla)}${r.Variedad?' · '+esc(r.Variedad):''}</b></div>
+      <div class="kv"><span>Ingresó el</span><b>${fmtD(r.Fecha_Ingreso)}</b></div>
+      <div class="kv"><span>Estado</span><b>${esc(r.Estado)}</b></div>
+    </div>
+    <div class="total-box"><div class="l">Cantidad actual en custodia</div><div class="v">${fmtKg(r.Cantidad_Actual_kg)} kg</div>${num(r.Cantidad_Sacos_Actual)>0?`<div style="font-size:11px;color:var(--oro);margin-top:4px">${fmtKg(r.Cantidad_Sacos_Actual)} sacos</div>`:''}</div>
+    <div class="qr-row"><div id="qrBox"></div><div class="lab">Verificación</div></div>
+  </div>
+  <div class="pie">Almacén Leguminosas del Alba · Servicio de almacenamiento de terceros · Impreso ${fmtDT(nowStamp())}</div>
+</div>
+<script>
+  try{ new QRCode(document.getElementById('qrBox'),{text:${qrText},width:84,height:84,colorDark:'#16281F',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M}); }
+  catch(e){ document.getElementById('qrBox').innerHTML='<div style="width:84px;height:84px;display:flex;align-items:center;justify-content:center;font-size:8px;color:#999;border:1px dashed #ccc;border-radius:8px;text-align:center;padding:6px">Sin conexión para QR</div>'; }
+<\/script>
+</body></html>`);
+  w.document.close();
 }
 
 function abrirModalNuevoLote(){
@@ -994,7 +1528,7 @@ function abrirModalNuevoLote(){
     <div class="modal-head"><div><h3>${ic('package')} Nuevo lote — recepción</h3><div class="sub">Registra la entrada de un lote al almacén</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
     <div class="modal-body">
       <div class="grid2">
-        <div class="field"><label>Tipo de semilla</label><select id="nlTipo">${CONFIG.TIPOS_SEMILLA.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
+        <div class="field"><label>Tipo de semilla <a href="javascript:void(0)" id="nlAgregarRubro" style="text-transform:none;font-weight:600;color:var(--maiz-lt);letter-spacing:0">+ agregar rubro nuevo</a></label><select id="nlTipo">${CONFIG.TIPOS_SEMILLA.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
         <div class="field"><label>Variedad</label><input id="nlVariedad" placeholder="Ej. DK-410, Tacarigua..."></div>
       </div>
       <div id="nlCodigoMaizWrap" style="display:none">
@@ -1051,6 +1585,7 @@ function abrirModalNuevoLote(){
     </div>
     <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="nlGuardar">${ic('checkcircle')} Registrar lote</button></div>`;
   openModal(html,{wide:true});
+  if($('#nlAgregarRubro')) $('#nlAgregarRubro').onclick=()=>abrirModalRubros();
   const tipoSel=$('#nlTipo');
   let caraotaModo='calc';
   const recalcMaiz=()=>{
@@ -1220,6 +1755,7 @@ function abrirPasaporte(id){
       <button class="btn btn-outline" id="ppEtiqueta">${ic('qrcode')} Imprimir etiqueta</button>
       ${canWrite()&&lote.Tipo_Semilla==='Caraota'?`<button class="btn btn-ghost" id="ppSecado">${ic('droplet')} Registrar secado</button>`:''}
       ${canWrite()?`<button class="btn btn-ghost" id="ppGerm">${ic('sprout')} Registrar germinación</button>`:''}
+      ${canWrite()&&num(lote.Stock_Actual_kg)>0?`<button class="btn btn-ghost" id="ppDividir">${ic('shuffle')} Dividir lote</button>`:''}
       ${canWrite()?`<button class="btn btn-ghost" id="ppAjuste">${ic('shuffle')} Ajuste / devolución</button>`:''}
       <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
     </div>`;
@@ -1227,7 +1763,70 @@ function abrirPasaporte(id){
   if($('#ppEtiqueta')) $('#ppEtiqueta').onclick=()=>abrirEtiquetaLote(lote.ID_Lote);
   if($('#ppSecado')) $('#ppSecado').onclick=()=>{ closeModal(); setView('secado'); S.sub.loteId=lote.ID_Lote; renderView(); };
   if($('#ppGerm')) $('#ppGerm').onclick=()=>{ closeModal(); abrirModalGerminacion(lote.ID_Lote); };
+  if($('#ppDividir')) $('#ppDividir').onclick=()=>{ closeModal(); abrirModalDividirLote(lote.ID_Lote); };
   if($('#ppAjuste')) $('#ppAjuste').onclick=()=>{ closeModal(); abrirModalAjuste(lote.ID_Lote); };
+}
+
+/* ======================= DIVISIÓN DE LOTES ======================= */
+function abrirModalDividirLote(loteId){
+  if(!canWrite()) return;
+  const lote=loteById(loteId); if(!lote) return;
+  const stock=num(lote.Stock_Actual_kg);
+  if(stock<=0){ toast('Este lote no tiene stock disponible para dividir',true); return; }
+  const sugerido1=round2(stock*0.7);
+  const html=`
+    <div class="modal-head"><div><h3>${ic('shuffle')} Dividir lote ${esc(lote.ID_Lote)}</h3><div class="sub">Reparte el stock en dos lotes nuevos con destinos distintos — no afecta la calculadora ni las mermas ya registradas</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
+    <div class="modal-body">
+      <div class="mini-note">${ic('info')} Stock disponible a repartir: <b>${fmtCantidadLote(lote)}</b>. La suma de ambas partes debe coincidir exactamente.</div>
+      <div class="grid2">
+        <div class="field">
+          <label>Parte 1 — Cantidad (kg)</label>
+          <input id="dvKg1" type="number" min="0" step="0.01" value="${sugerido1}">
+        </div>
+        <div class="field">
+          <label>Destino parte 1</label>
+          <select id="dvDest1"><option value="Semilla">Semilla</option><option value="Consumo">Consumo</option></select>
+        </div>
+      </div>
+      <div class="grid2">
+        <div class="field">
+          <label>Parte 2 — Cantidad (kg) <span id="dvKg2Auto" class="hint" style="text-transform:none;font-weight:400"></span></label>
+          <input id="dvKg2" type="number" min="0" step="0.01" value="${round2(stock-sugerido1)}">
+        </div>
+        <div class="field">
+          <label>Destino parte 2</label>
+          <select id="dvDest2"><option value="Consumo">Consumo</option><option value="Semilla">Semilla</option></select>
+        </div>
+      </div>
+      <div class="res-row total" id="dvSumaRow" style="padding:12px 16px;background:var(--panel-2);border-radius:var(--r-sm);margin-bottom:6px">
+        <span class="l">Suma de ambas partes</span><span class="v" id="dvSuma">0,00 kg</span>
+      </div>
+      <div class="field"><label>Motivo (opcional)</label><input id="dvMotivo" placeholder="Ej. Resultado de germinación, decisión comercial..."></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="dvGuardar">${ic('shuffle')} Dividir lote</button></div>`;
+  openModal(html);
+  const kg1=$('#dvKg1'), kg2=$('#dvKg2'), sumaEl=$('#dvSuma'), sumaRow=$('#dvSumaRow');
+  const recalc=(origen)=>{
+    if(origen==='kg1'){ kg2.value=Math.max(0,round2(stock-num(kg1.value))); }
+    const suma=round2(num(kg1.value)+num(kg2.value));
+    sumaEl.textContent=fmtKg(suma)+' kg';
+    const ok=Math.abs(suma-stock)<=0.01;
+    sumaRow.style.background = ok? 'rgba(34,197,94,.12)':'rgba(239,68,68,.1)';
+    sumaEl.style.color = ok? 'var(--ok-lt)':'var(--bad-lt)';
+  };
+  kg1.oninput=()=>recalc('kg1');
+  kg2.oninput=()=>recalc('kg2');
+  recalc('kg1');
+  $('#dvGuardar').onclick=async()=>{
+    const c1=num(kg1.value), c2=num(kg2.value);
+    if(c1<=0||c2<=0){ toast('Ambas cantidades deben ser mayores a 0',true); return; }
+    if(Math.abs((c1+c2)-stock)>0.01){ toast('La suma debe ser '+fmtKg(stock)+' kg (actual: '+fmtKg(c1+c2)+' kg)',true); return; }
+    const payload={idLoteOriginal:lote.ID_Lote,cantidad1_kg:c1,cantidad2_kg:c2,destino1:$('#dvDest1').value,destino2:$('#dvDest2').value,usuario:S.user.Email,motivo:$('#dvMotivo').value.trim()};
+    $('#dvGuardar').disabled=true; $('#dvGuardar').textContent='Dividiendo...';
+    const r=await dividirLote(payload);
+    if(r&&r.ok){ closeModal(); toast('Lote dividido en '+r.lotes[0].ID_Lote+' y '+r.lotes[1].ID_Lote); renderNav(); renderView(); }
+    else { $('#dvGuardar').disabled=false; $('#dvGuardar').innerHTML=ic('shuffle')+' Dividir lote'; }
+  };
 }
 /* ======================= ETIQUETA DE LOTE (impresión + QR) ======================= */
 function kvEtq(lab,val){ return `<div class="etq-kv"><span class="etq-lab">${esc(lab)}</span><span class="etq-val">${esc(val)}</span></div>`; }
@@ -1259,6 +1858,20 @@ function loteQRText(lote){
   L.push('Estado: '+(lote.Estado||'—'));
   L.push('Registrado por: '+(lote.Registrado_Por||'—'));
   if(lote.Observaciones) L.push('Observaciones: '+lote.Observaciones);
+  return L.join('\n');
+}
+
+function notaQRText(nota,t){
+  const L=[];
+  L.push('ALMACÉN LEGUMINOSAS DEL ALBA');
+  L.push('Nota de salida: '+nota.ID_Nota);
+  L.push('Fecha: '+fmtDT(nota.Fecha));
+  L.push('Receptor: '+nota.Nombre_Receptor+(nota.Cedula_Receptor?' · C.I. '+nota.Cedula_Receptor:''));
+  if(nota.Entregado_Por) L.push('Entregó: '+nota.Entregado_Por);
+  if(nota.Autorizado_Por) L.push('Autorizó: '+nota.Autorizado_Por);
+  L.push('Plan: '+(nota.Plan||'General'));
+  L.push('Total despachado: '+fmtKg(t.kg)+' kg ('+t.sacos+' sacos, '+t.n+' producto(s))');
+  L.push('Estado: '+nota.Estado);
   return L.join('\n');
 }
 
@@ -1596,32 +2209,57 @@ function totalesNota(idNota){
   return { kg: lineas.reduce((s,d)=>s+num(d.Cantidad_kg),0), sacos: lineas.reduce((s,d)=>s+num(d.Cantidad_Sacos),0), n: lineas.length };
 }
 
+function resumenPorPlan(){
+  const out={};
+  CONFIG.PLANES.forEach(p=>out[p]={kg:0,notas:0});
+  S.DB.notas.filter(n=>n.Estado!=='Anulada').forEach(n=>{
+    const plan = n.Plan||'General';
+    if(!out[plan]) out[plan]={kg:0,notas:0};
+    const t=totalesNota(n.ID_Nota);
+    out[plan].kg+=t.kg; out[plan].notas+=1;
+  });
+  return out;
+}
 function renderNotasView(c){
   S.sub.filtroNota = S.sub.filtroNota || 'Todas';
+  S.sub.filtroPlan = S.sub.filtroPlan || 'Todos';
   S.sub.buscaNota = S.sub.buscaNota || '';
   const estados=['Todas','Emitida','Anulada'];
+  const planesFiltro=['Todos',...CONFIG.PLANES];
   let notas=[...S.DB.notas];
   if(S.sub.filtroNota!=='Todas') notas=notas.filter(n=>n.Estado===S.sub.filtroNota);
+  if(S.sub.filtroPlan!=='Todos') notas=notas.filter(n=>(n.Plan||'General')===S.sub.filtroPlan);
   if(S.sub.buscaNota){ const q=S.sub.buscaNota.toLowerCase(); notas=notas.filter(n=>[n.ID_Nota,n.Nombre_Receptor,n.Cedula_Receptor,n.Entregado_Por].some(v=>String(v||'').toLowerCase().includes(q))); }
   notas.sort((a,b)=>(parseD(b.Fecha)||0)-(parseD(a.Fecha)||0));
 
+  const resumen=resumenPorPlan();
+  const planColors=['var(--maiz)','var(--otra)','var(--caraota)','var(--soya)','var(--sorgo)','var(--girasol)','var(--pasto)'];
+
   c.innerHTML=`
+    <div class="section-title" style="margin-bottom:10px">Resumen por plan</div>
+    <div class="kpi-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:14px;margin-bottom:22px">
+      ${CONFIG.PLANES.map((p,i)=>kpi(p,fmtKg(resumen[p]?resumen[p].kg:0)+' kg',(i===0?'clipboardcheck':'filetext'),planColors[i%planColors.length])).join('')}
+    </div>
     <div class="toolbar">
       <div class="search-box">${ic('search')}<input id="buscarNota" placeholder="Buscar por nota, nombre, cédula..." value="${esc(S.sub.buscaNota)}"></div>
       <div class="pill-row" id="chipsNota">${estados.map(e=>`<div class="chip-filter ${S.sub.filtroNota===e?'active':''}" data-e="${esc(e)}">${e}</div>`).join('')}</div>
+      <select id="selPlanFiltro" style="width:auto;padding:8px 30px 8px 12px;border-radius:20px;border:1.5px solid var(--linea-strong);background:rgba(15,18,32,.025);color:var(--texto);font-size:12.5px">
+        ${planesFiltro.map(p=>`<option value="${esc(p)}" ${S.sub.filtroPlan===p?'selected':''}>${p==='Todos'?'Todos los planes':p}</option>`).join('')}
+      </select>
       <div class="spacer"></div>
+      ${canWrite()?`<button class="btn btn-ghost" id="btnPlanes">${ic('clipboardcheck')} Planes</button>`:''}
       ${canWrite()?`<button class="btn btn-primary" id="btnNuevaNota">${ic('plus')} Nueva nota de salida</button>`:''}
     </div>
     <div class="card">
       <div class="tbl-wrap">
       ${notas.length?`<table class="tbl"><thead><tr>
-        <th>Nota</th><th>Fecha</th><th>Receptor</th><th>Cédula</th><th class="num">Productos</th><th class="num">Total</th><th>Estado</th><th></th>
+        <th>Nota</th><th>Fecha</th><th>Receptor</th><th>Plan</th><th class="num">Productos</th><th class="num">Total</th><th>Estado</th><th></th>
       </tr></thead><tbody>
       ${notas.map(n=>{ const t=totalesNota(n.ID_Nota); return `<tr class="row-link" data-id="${esc(n.ID_Nota)}">
         <td class="idcode">${esc(n.ID_Nota)}</td>
         <td>${fmtDT(n.Fecha)}</td>
         <td>${esc(n.Nombre_Receptor)}</td>
-        <td>${esc(n.Cedula_Receptor||'—')}</td>
+        <td><span class="st-badge info">${esc(n.Plan||'General')}</span></td>
         <td class="num">${t.n}</td>
         <td class="num">${fmtKg(t.kg)} kg</td>
         <td>${stBadge(n.Estado)}</td>
@@ -1631,9 +2269,11 @@ function renderNotasView(c){
       </div>
     </div>`;
   $$('#chipsNota .chip-filter',c).forEach(ch=>ch.onclick=()=>{ S.sub.filtroNota=ch.dataset.e; renderView(); });
+  $('#selPlanFiltro').onchange=e=>{ S.sub.filtroPlan=e.target.value; renderView(); };
   $('#buscarNota').oninput=debounce(e=>{ S.sub.buscaNota=e.target.value; renderView(); const inp=$('#buscarNota'); if(inp) setCaretEnd(inp); },260);
   $$('tr.row-link',c).forEach(tr=>tr.onclick=()=>abrirDetalleNota(tr.dataset.id));
   if($('#btnNuevaNota')) $('#btnNuevaNota').onclick=()=>abrirModalNuevaNota();
+  if($('#btnPlanes')) $('#btnPlanes').onclick=()=>abrirModalPlanes();
 }
 
 function abrirDetalleNota(idNota){
@@ -1652,6 +2292,7 @@ function abrirDetalleNota(idNota){
         <div class="field"><label>Entregado por</label><div style="padding:10px 0;font-size:14px;color:var(--texto)">${esc(nota.Entregado_Por||'—')}</div></div>
         <div class="field"><label>Autorizado por</label><div style="padding:10px 0;font-size:14px;color:var(--texto)">${esc(nota.Autorizado_Por||'—')}</div></div>
       </div>
+      <div class="field"><label>Plan</label><div style="padding:2px 0"><span class="st-badge info">${esc(nota.Plan||'General')}</span></div></div>
       <div class="section-title">Productos despachados</div>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lote</th><th>Semilla</th><th>Variedad/Híbrido</th><th class="num">Kg</th><th class="num">Sacos</th></tr></thead><tbody>
       ${lineas.map(d=>`<tr><td class="idcode">${esc(d.ID_Lote)}</td><td>${seedBadge(d.Tipo_Semilla)}</td><td>${esc(d.Variedad_Hibrido||'—')}</td><td class="num">${fmtKg(d.Cantidad_kg)} kg</td><td class="num">${d.Cantidad_Sacos||0}</td></tr>`).join('')}
@@ -1660,7 +2301,8 @@ function abrirDetalleNota(idNota){
       <div id="anularBox"></div>
     </div>
     <div class="modal-foot">
-      ${nota.PDF_Link?`<a class="btn btn-outline" href="${esc(nota.PDF_Link)}" target="_blank" rel="noopener">${ic('download')} Abrir PDF de respaldo</a>`:`<button class="btn btn-outline" id="btnImprimirNota">${ic('printer')} Vista previa / imprimir</button>`}
+      ${nota.PDF_Link?`<a class="btn btn-outline" href="${esc(nota.PDF_Link)}" target="_blank" rel="noopener">${ic('download')} Abrir PDF de respaldo</a>`:''}
+      <button class="btn btn-outline" id="btnImprimirNota">${ic('printer')} Vista previa / imprimir</button>
       ${isAdmin()&&nota.Estado==='Emitida'?`<button class="btn btn-ghost" id="btnAnular" style="color:var(--bad)">${ic('ban')} Anular nota</button>`:''}
       <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
     </div>`;
@@ -1685,36 +2327,132 @@ function abrirDetalleNota(idNota){
 function imprimirNota(nota,lineas,t){
   const w=window.open('','_blank');
   if(!w){ toast('Habilita las ventanas emergentes para imprimir',true); return; }
+  const esAnulada = nota.Estado==='Anulada';
+  const watermark = esAnulada ? 'ANULADA' : (nota.PDF_Link ? 'COPIA' : '');
+  const estadoPillClass = esAnulada ? 'anulada' : 'emitida';
+  const rowsHtml = lineas.map(d=>`<tr>
+      <td><span class="dot" style="background:var(--${tipoClass(d.Tipo_Semilla)})"></span>${esc(d.Tipo_Semilla)}</td>
+      <td>${esc(d.Variedad_Hibrido||'—')}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6B7280">${esc(d.ID_Lote)}</td>
+      <td class="num">${fmtKg(d.Cantidad_kg)}</td>
+      <td class="num">${d.Cantidad_Sacos||0}</td>
+    </tr>`).join('');
+  const obsBlock = nota.Observaciones ? `<div class="obs"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> ${esc(nota.Observaciones)}</div>` : '';
+  const qrText = JSON.stringify(notaQRText(nota,t));
+
   w.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>Nota ${esc(nota.ID_Nota)}</title>
-  <style>
-    body{font-family:'IBM Plex Sans',Arial,sans-serif;color:#1a1a1a;padding:40px;max-width:720px;margin:0 auto}
-    h1{font-size:20px;margin-bottom:2px} .sub{color:#666;font-size:12px;margin-bottom:24px}
-    table{width:100%;border-collapse:collapse;margin:18px 0} th,td{border:1px solid #ccc;padding:8px 10px;font-size:12.5px;text-align:left}
-    th{background:#f2f2ee} .num{text-align:right} .grid{display:flex;gap:30px;margin:14px 0}
-    .grid div{font-size:13px} .grid b{display:block;font-size:10.5px;text-transform:uppercase;color:#888;margin-bottom:3px}
-    .sign{display:flex;gap:60px;margin-top:60px} .sign div{flex:1;border-top:1px solid #333;padding-top:6px;font-size:12px;text-align:center}
-    .foot{margin-top:30px;font-size:10.5px;color:#999;border-top:1px solid #ddd;padding-top:10px}
-  </style></head><body>
-  <h1>Almacén Leguminosas del Alba</h1>
-  <div class="sub">Nota de salida ${esc(nota.ID_Nota)} · ${fmtDT(nota.Fecha)} · Estado: ${esc(nota.Estado)}</div>
-  <div class="grid">
-    <div><b>Receptor</b>${esc(nota.Nombre_Receptor)}</div>
-    <div><b>Cédula</b>${esc(nota.Cedula_Receptor||'—')}</div>
-    <div><b>Teléfono</b>${esc(nota.Telefono_Receptor||'—')}</div>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@600;700&family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"><\/script>
+<style>
+  :root{--banda:#16281F;--oro:#F2B341;--oroDk:#B45309;--crema:#F6F3E9;--texto:#1B1E14;--mute:#6B7280;--linea:#E7E5DC;
+        --maiz:#F59E0B;--caraota:#8B5CF6;--sorgo:#F97316;--soya:#22C55E;--pasto:#65A30D;--girasol:#EAB308;--otra:#3B82F6;}
+  *{box-sizing:border-box}
+  body{font-family:'IBM Plex Sans',Arial,sans-serif;color:var(--texto);margin:0;padding:0;background:#EDEDE5}
+  .sheet{max-width:760px;margin:26px auto;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.12);position:relative;overflow:hidden;border-radius:6px}
+  .watermark{position:absolute;top:48%;left:50%;transform:translate(-50%,-50%) rotate(-28deg);font-family:'Space Grotesk',sans-serif;font-size:96px;font-weight:700;color:rgba(180,40,40,.055);letter-spacing:.04em;pointer-events:none;white-space:nowrap;z-index:0}
+  .banda{background:linear-gradient(135deg,#1D3327,var(--banda) 65%);color:#fff;padding:26px 40px 22px;display:flex;justify-content:space-between;align-items:flex-start;position:relative;z-index:1}
+  .brand{display:flex;align-items:center;gap:13px}
+  .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(155deg,var(--oro),var(--oroDk));display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:19px;color:#241900;flex:none;box-shadow:0 4px 14px rgba(0,0,0,.25)}
+  .brand h1{font-family:'Space Grotesk',sans-serif;font-size:16.5px;margin:0 0 3px;letter-spacing:-.01em}
+  .brand .tagline{font-size:10px;letter-spacing:.13em;text-transform:uppercase;color:var(--oro);font-weight:600}
+  .folio{text-align:right}
+  .folio .lab{font-size:8.5px;letter-spacing:.12em;text-transform:uppercase;color:#AEB8A8;margin-bottom:4px}
+  .folio .num{font-family:'Space Grotesk',sans-serif;font-size:21px;font-weight:700;color:#fff}
+  .pill{display:inline-block;margin-top:6px;padding:3px 12px;border-radius:20px;font-size:9.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase}
+  .pill.emitida{background:rgba(74,222,128,.2);color:#4ADE80}
+  .pill.anulada{background:rgba(252,165,165,.22);color:#FCA5A5}
+  .cuerpo{padding:28px 40px 6px;position:relative;z-index:1}
+  .meta{font-size:11px;color:var(--mute);margin-bottom:20px}
+  .cards{display:flex;gap:14px;margin-bottom:22px}
+  .card{flex:1;background:var(--crema);border-radius:10px;padding:15px 17px;border:1px solid var(--linea)}
+  .card .ct{font-size:9px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;margin-bottom:9px}
+  .card .kv{display:flex;justify-content:space-between;gap:10px;font-size:12px;padding:3.5px 0}
+  .card .kv b{color:var(--texto);font-weight:600;text-align:right}
+  .card .kv span{color:var(--mute);white-space:nowrap}
+  .sect{font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--mute);font-weight:700;margin:20px 0 9px;display:flex;align-items:center;gap:8px}
+  .sect::after{content:"";flex:1;height:1px;background:var(--linea)}
+  table{width:100%;border-collapse:collapse;font-size:11.8px}
+  th{background:var(--banda);color:#fff;text-align:left;padding:8px 11px;font-size:9px;letter-spacing:.06em;text-transform:uppercase;font-weight:600}
+  th.num,td.num{text-align:right;font-family:'IBM Plex Mono',monospace}
+  td{padding:8px 11px;border-bottom:1px solid var(--linea)}
+  tbody tr:nth-child(even){background:#FAFAF7}
+  .dot{display:inline-block;width:7px;height:7px;border-radius:50%;margin-right:6px;vertical-align:middle}
+  .total-box{display:flex;justify-content:flex-end;margin-top:12px}
+  .total-inner{background:var(--banda);color:#fff;border-radius:9px;padding:11px 20px;text-align:right;min-width:190px}
+  .total-inner .l{font-size:8.5px;letter-spacing:.1em;text-transform:uppercase;color:var(--oro);margin-bottom:2px}
+  .total-inner .v{font-family:'Space Grotesk',sans-serif;font-size:19px;font-weight:700}
+  .obs{margin-top:16px;font-size:11px;color:var(--mute);background:#FBFAF6;border-left:3px solid var(--oro);padding:9px 13px;border-radius:0 8px 8px 0;display:flex;gap:7px;align-items:flex-start}
+  .firma-row{display:flex;gap:34px;margin-top:50px;align-items:flex-end}
+  .firma{flex:1;text-align:center}
+  .firma .line{border-top:1.3px solid #333;padding-top:6px;font-size:11px;font-weight:600}
+  .firma .sub{font-size:9.5px;color:var(--mute);margin-top:2px}
+  .qr-block{text-align:center;flex:none}
+  .qr-block .lab{font-size:8px;letter-spacing:.08em;text-transform:uppercase;color:var(--mute);margin-top:6px}
+  .pie{margin-top:30px;padding:13px 40px 20px;border-top:1px solid var(--linea);font-size:9px;color:#9CA3AF;display:flex;justify-content:space-between;position:relative;z-index:1}
+  .toolbar-print{max-width:760px;margin:14px auto 0;display:flex;justify-content:flex-end;gap:10px}
+  .toolbar-print button{font-family:inherit;font-size:12.5px;font-weight:600;padding:9px 16px;border-radius:8px;border:1px solid #ccc;background:#fff;cursor:pointer}
+  .toolbar-print button.primary{background:var(--banda);color:#fff;border-color:var(--banda)}
+  @media print{
+    body{background:#fff}
+    .sheet{box-shadow:none;margin:0;max-width:100%;border-radius:0}
+    .toolbar-print{display:none}
+    @page{margin:12mm}
+  }
+</style></head><body>
+<div class="toolbar-print"><button onclick="window.print()" class="primary">Imprimir / Guardar PDF</button></div>
+<div class="sheet">
+  <div class="watermark">${watermark}</div>
+  <div class="banda">
+    <div class="brand">
+      <div class="logo">A</div>
+      <div><h1>Almacén Leguminosas del Alba</h1><div class="tagline">Nota de salida de almacén</div></div>
+    </div>
+    <div class="folio">
+      <div class="lab">N.º de nota</div>
+      <div class="num">${esc(nota.ID_Nota)}</div>
+      <span class="pill ${estadoPillClass}">${esc(nota.Estado)}</span>
+    </div>
   </div>
-  <div class="grid">
-    <div><b>Entregado por</b>${esc(nota.Entregado_Por||'—')}</div>
-    <div><b>Autorizado por</b>${esc(nota.Autorizado_Por||'—')}</div>
+  <div class="cuerpo">
+    <div class="meta">Emitida el ${fmtDT(nota.Fecha)} · Documento generado por el sistema de inventario</div>
+    <div class="cards">
+      <div class="card">
+        <div class="ct">Receptor</div>
+        <div class="kv"><span>Nombre</span><b>${esc(nota.Nombre_Receptor)}</b></div>
+        <div class="kv"><span>Cédula</span><b>${esc(nota.Cedula_Receptor||'—')}</b></div>
+        <div class="kv"><span>Teléfono</span><b>${esc(nota.Telefono_Receptor||'—')}</b></div>
+      </div>
+      <div class="card">
+        <div class="ct">Despacho</div>
+        <div class="kv"><span>Entregó</span><b>${esc(nota.Entregado_Por||'—')}</b></div>
+        <div class="kv"><span>Autorizó</span><b>${esc(nota.Autorizado_Por||'—')}</b></div>
+        <div class="kv"><span>Plan</span><b>${esc(nota.Plan||'General')}</b></div>
+        <div class="kv"><span>Productos</span><b>${t.n} lote(s)</b></div>
+      </div>
+    </div>
+    <div class="sect">Productos despachados</div>
+    <table><thead><tr><th>Semilla</th><th>Variedad / Híbrido</th><th>Lote</th><th class="num">Kg</th><th class="num">Sacos</th></tr></thead>
+    <tbody>${rowsHtml}</tbody></table>
+    <div class="total-box"><div class="total-inner"><div class="l">Total despachado</div><div class="v">${fmtKg(t.kg)} kg</div></div></div>
+    ${obsBlock}
+    <div class="firma-row">
+      <div class="qr-block"><div id="qrBox"></div><div class="lab">Verificación</div></div>
+      <div class="firma"><div class="line">${esc(nota.Entregado_Por||'—')}</div><div class="sub">Entrega</div></div>
+      <div class="firma"><div class="line">${esc(nota.Nombre_Receptor)}</div><div class="sub">Recibe conforme · C.I. ${esc(nota.Cedula_Receptor||'—')}</div></div>
+    </div>
   </div>
-  <table><thead><tr><th>Lote</th><th>Semilla</th><th>Variedad/Híbrido</th><th class="num">Kg</th><th class="num">Sacos</th></tr></thead><tbody>
-  ${lineas.map(d=>`<tr><td>${esc(d.ID_Lote)}</td><td>${esc(d.Tipo_Semilla)}</td><td>${esc(d.Variedad_Hibrido||'—')}</td><td class="num">${fmtKg(d.Cantidad_kg)}</td><td class="num">${d.Cantidad_Sacos||0}</td></tr>`).join('')}
-  </tbody><tfoot><tr><td colspan="3"><b>Total</b></td><td class="num"><b>${fmtKg(t.kg)} kg</b></td><td class="num"><b>${t.sacos}</b></td></tr></tfoot></table>
-  ${nota.Observaciones?`<p style="font-size:12.5px;color:#555">Observaciones: ${esc(nota.Observaciones)}</p>`:''}
-  <div class="sign"><div>Entrega</div><div>Recibe conforme</div></div>
-  <div class="foot">Documento generado por el sistema de inventario Almacén Leguminosas del Alba.</div>
-  </body></html>`);
+  <div class="pie"><span>Almacén Leguminosas del Alba · Sistema de control de inventario</span><span>Impreso ${fmtDT(nowStamp())}</span></div>
+</div>
+<script>
+  try{
+    new QRCode(document.getElementById('qrBox'),{text:${qrText},width:88,height:88,colorDark:'#16281F',colorLight:'#ffffff',correctLevel:QRCode.CorrectLevel.M});
+  }catch(e){
+    document.getElementById('qrBox').innerHTML='<div style="width:88px;height:88px;display:flex;align-items:center;justify-content:center;font-size:8.5px;color:#999;border:1px dashed #ccc;border-radius:8px;text-align:center;padding:6px">Sin conexión para generar QR</div>';
+  }
+<\/script>
+</body></html>`);
   w.document.close();
-  setTimeout(()=>w.print(),300);
 }
 
 function abrirModalNuevaNota(){
@@ -1735,7 +2473,10 @@ function abrirModalNuevaNota(){
         <div class="field"><label>Teléfono</label><input id="nnTelefono" placeholder="Opcional"></div>
         <div class="field"><label>Autorizado por</label><input id="nnAutoriza" placeholder="Nombre de quien autoriza"></div>
       </div>
-      <div class="field"><label>Entregado por</label><input id="nnEntrega" value="${esc(S.user.Nombre||S.user.Email)}"></div>
+      <div class="grid2">
+        <div class="field"><label>Entregado por</label><input id="nnEntrega" value="${esc(S.user.Nombre||S.user.Email)}"></div>
+        <div class="field"><label>Plan <a href="javascript:void(0)" id="nnAgregarPlan" style="text-transform:none;font-weight:600;color:var(--maiz-lt);letter-spacing:0">+ agregar plan nuevo</a></label><select id="nnPlan">${CONFIG.PLANES.map(p=>`<option value="${esc(p)}">${esc(p)}</option>`).join('')}</select></div>
+      </div>
       <div class="section-title" style="margin-top:18px">Productos a despachar</div>
       <div id="nnLineas"></div>
       <button class="btn btn-outline btn-sm" id="nnAgregar" style="margin-top:4px">${ic('plus')} Agregar producto</button>
@@ -1790,6 +2531,7 @@ function abrirModalNuevaNota(){
   }
   renderLineas();
   $('#nnAgregar').onclick=()=>{ state.push({loteId:lotesDisponibles[0].ID_Lote,kg:'',sacos:''}); renderLineas(); };
+  if($('#nnAgregarPlan')) $('#nnAgregarPlan').onclick=()=>abrirModalPlanes();
 
   $('#nnGuardar').onclick=async()=>{
     const nombre=$('#nnNombre').value.trim();
@@ -1806,7 +2548,7 @@ function abrirModalNuevaNota(){
     }
     const nota={
       Nombre_Receptor:nombre, Cedula_Receptor:$('#nnCedula').value.trim(), Telefono_Receptor:$('#nnTelefono').value.trim(),
-      Entregado_Por:$('#nnEntrega').value.trim(), Autorizado_Por:$('#nnAutoriza').value.trim(),
+      Entregado_Por:$('#nnEntrega').value.trim(), Autorizado_Por:$('#nnAutoriza').value.trim(), Plan:$('#nnPlan').value,
       Usuario_Registro:S.user.Email, Observaciones:$('#nnObs').value.trim()
     };
     const detalle=state.map(ln=>{ const lote=loteById(ln.loteId); return { ID_Lote:ln.loteId, Tipo_Semilla:lote.Tipo_Semilla, Variedad_Hibrido:[lote.Variedad,lote.Hibrido].filter(Boolean).join(' / '), Cantidad_kg:num(ln.kg), Cantidad_Sacos:num(ln.sacos) }; });
@@ -1816,55 +2558,135 @@ function abrirModalNuevaNota(){
     else { $('#nnGuardar').disabled=false; $('#nnGuardar').innerHTML=ic('checkcircle')+' Emitir nota'; }
   };
 }
-/* ======================= REPORTES (PDF) ======================= */
-const PDF_COLORS = { noche:[18,20,15], panel:[43,48,36], maiz:[227,167,46], caraota:[134,89,176], sorgo:[184,112,58], soya:[124,154,92], otra:[74,143,168], crema:[239,233,216] };
+/* ======================= REPORTES (PDF) — diseño de marca ======================= */
+const PDF_COLORS = {
+  banda:[22,40,31], banda2:[29,51,39],
+  oro:[242,179,65], oroDk:[180,83,9],
+  texto:[27,30,20], mute:[107,114,128], linea:[228,229,220],
+  crema:[246,243,233], zebra:[250,250,247], white:[255,255,255],
+  ok:[21,128,61], warn:[161,98,7], bad:[185,28,28],
+  maiz:[245,158,11], caraota:[139,92,246], sorgo:[249,115,22], soya:[34,197,94],
+  pasto:[101,163,13], girasol:[234,179,8], otra:[59,130,246]
+};
+function pdfSeedColor(tipo){ return PDF_COLORS[tipoClass(tipo)]||PDF_COLORS.otra; }
 function pdfDoc(){ const {jsPDF}=window.jspdf; return new jsPDF({unit:'mm',format:'a4'}); }
-function pdfHeader(doc,titulo,subtitulo){
-  doc.setFillColor(...PDF_COLORS.noche); doc.rect(0,0,210,24,'F');
-  doc.setTextColor(239,233,216); doc.setFont('helvetica','bold'); doc.setFontSize(13.5);
-  doc.text('ALMACÉN LEGUMINOSAS DEL ALBA',14,11);
-  doc.setTextColor(227,167,46); doc.setFont('helvetica','normal'); doc.setFontSize(10.5);
-  doc.text(titulo,14,18);
-  doc.setTextColor(168,163,140); doc.setFontSize(8.3);
-  doc.text(subtitulo,14,22.3);
-  doc.setTextColor(30,30,30);
+
+/* Banda de marca con sello/logo, título y acento de color por reporte */
+function pdfHeader(doc,titulo,subtitulo,accent){
+  const ac = accent||PDF_COLORS.oro;
+  doc.setFillColor(...PDF_COLORS.banda); doc.rect(0,0,210,30,'F');
+  doc.setFillColor(...PDF_COLORS.banda2); doc.rect(0,0,210,2.6,'F');
+  doc.setFillColor(...ac); doc.rect(0,30,210,1.6,'F');
+  doc.setFillColor(...ac); doc.roundedRect(14,7.5,14,14,3,3,'F');
+  doc.setTextColor(36,25,0); doc.setFont('helvetica','bold'); doc.setFontSize(12.5);
+  doc.text('A',21,17,{align:'center'});
+  doc.setTextColor(255,255,255); doc.setFont('helvetica','bold'); doc.setFontSize(12.5);
+  doc.text('ALMACÉN LEGUMINOSAS DEL ALBA',33,13.5);
+  doc.setTextColor(...ac); doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
+  doc.text(titulo.toUpperCase(),33,19.3);
+  doc.setTextColor(198,203,193); doc.setFont('helvetica','normal'); doc.setFontSize(7.8);
+  doc.text(subtitulo,33,24.3);
+  doc.setTextColor(198,203,193); doc.setFontSize(7);
+  doc.text('Generado: '+fmtDT(nowStamp()),196,10,{align:'right'});
+  doc.setTextColor(...PDF_COLORS.texto);
 }
 function pdfFooter(doc){
   const pages=doc.internal.getNumberOfPages();
   for(let i=1;i<=pages;i++){
-    doc.setPage(i); doc.setFontSize(7.5); doc.setTextColor(150,150,150);
-    doc.text(`Generado el ${fmtDT(nowStamp())} · Página ${i} de ${pages}`,14,290);
+    doc.setPage(i);
+    doc.setDrawColor(...PDF_COLORS.linea); doc.setLineWidth(0.2); doc.line(14,285,196,285);
+    doc.setFont('helvetica','normal'); doc.setFontSize(7.2); doc.setTextColor(...PDF_COLORS.mute);
+    doc.text('Almacén Leguminosas del Alba · Sistema de control de inventario',14,289.5);
+    doc.text(`Página ${i} de ${pages}`,196,289.5,{align:'right'});
   }
 }
 function pdfSave(doc,nombre){ doc.save(nombre); toast('Reporte descargado'); }
 
+/* Fila de tarjetas KPI destacadas debajo del encabezado */
+function pdfKpis(doc,y,items){
+  const marginX=14, gap=5, w=(182-gap*(items.length-1))/items.length, h=20;
+  items.forEach((k,i)=>{
+    const x=marginX+i*(w+gap);
+    doc.setFillColor(...PDF_COLORS.crema); doc.roundedRect(x,y,w,h,2.2,2.2,'F');
+    doc.setFillColor(...(k.color||PDF_COLORS.oro)); doc.roundedRect(x,y,1.7,h,0.8,0.8,'F');
+    doc.setTextColor(...PDF_COLORS.texto); doc.setFont('helvetica','bold'); doc.setFontSize(12.5);
+    doc.text(String(k.value),x+6,y+11.8);
+    doc.setTextColor(...PDF_COLORS.mute); doc.setFont('helvetica','normal'); doc.setFontSize(6.6);
+    doc.text(String(k.label).toUpperCase(),x+6,y+16.4);
+  });
+  return y+h+9;
+}
+/* Etiqueta de sección con marca de color */
+function pdfSectionLabel(doc,y,text){
+  doc.setFillColor(...PDF_COLORS.oro); doc.rect(14,y-3.4,2,4.2,'F');
+  doc.setTextColor(...PDF_COLORS.texto); doc.setFont('helvetica','bold'); doc.setFontSize(9.5);
+  doc.text(text.toUpperCase(),18,y);
+  return y+6.5;
+}
+const PDF_TABLE_BASE = { theme:'grid', margin:{left:14,right:14}, alternateRowStyles:{fillColor:PDF_COLORS.zebra},
+  styles:{fontSize:8.3,cellPadding:{top:4.2,bottom:4.2,left:4,right:4},lineColor:PDF_COLORS.linea,lineWidth:0.15,textColor:PDF_COLORS.texto} };
+
 function pdfReporteGeneral(){
+  const porTipo=stockPorTipo();
+  const stock=stockTotal();
+  const cuarentena=lotesEnCuarentena().length;
+  const aptos=S.DB.lotes.filter(l=>l.Estado==='Apto para Semilla').length;
   const doc=pdfDoc();
   pdfHeader(doc,'Reporte general de inventario',`Al ${fmtD(todayISO())} · ${S.DB.lotes.length} lote(s) registrados`);
-  const porTipo=stockPorTipo();
+  let y=pdfKpis(doc,38,[
+    {label:'Lotes registrados',value:S.DB.lotes.length,color:PDF_COLORS.oro},
+    {label:'Stock total (kg)',value:fmtKg(stock),color:PDF_COLORS.soya},
+    {label:'En cuarentena',value:cuarentena,color:PDF_COLORS.warn},
+    {label:'Aptos para semilla',value:aptos,color:PDF_COLORS.ok},
+  ]);
+  y=pdfSectionLabel(doc,y,'Stock por tipo de semilla');
   const resumen=CONFIG.TIPOS_SEMILLA.map(t=>[t,fmtKg(porTipo[t]||0)+' kg']);
-  doc.autoTable({ startY:30, head:[['Tipo de semilla','Stock actual']], body:resumen, theme:'grid', headStyles:{fillColor:PDF_COLORS.panel,textColor:PDF_COLORS.crema}, styles:{fontSize:9} });
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y, head:[['Tipo de semilla','Stock actual']],
+    body:resumen.length?resumen:[['—','Sin datos']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
+  const y2=pdfSectionLabel(doc,doc.lastAutoTable.finalY+10,'Detalle de lotes');
   const rows=[...S.DB.lotes].sort((a,b)=>(parseD(b.Fecha_Recepcion)||0)-(parseD(a.Fecha_Recepcion)||0)).map(l=>[l.ID_Lote,l.Tipo_Semilla,l.Variedad||'—',fmtD(l.Fecha_Recepcion),l.Destino||'—',fmtCantidadLote(l),l.Estado]);
-  doc.autoTable({ startY:doc.lastAutoTable.finalY+8, head:[['Lote','Semilla','Variedad','Recepción','Destino','Stock','Estado']], body:rows.length?rows:[['—','Sin lotes','—','—','—','—','—']], theme:'grid', headStyles:{fillColor:PDF_COLORS.panel,textColor:PDF_COLORS.crema}, styles:{fontSize:8} });
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y2, head:[['Lote','Semilla','Variedad','Recepción','Destino','Stock','Estado']],
+    body:rows.length?rows:[['—','Sin lotes','—','—','—','—','—']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8} }));
   pdfFooter(doc); pdfSave(doc,'reporte-general-inventario.pdf');
 }
 function pdfReportePorTipo(tipo){
   const lotes=[...S.DB.lotes].filter(l=>l.Tipo_Semilla===tipo).sort((a,b)=>(parseD(b.Fecha_Recepcion)||0)-(parseD(a.Fecha_Recepcion)||0));
   const stock=lotes.reduce((s,l)=>s+num(l.Stock_Actual_kg),0);
+  const aptos=lotes.filter(l=>l.Estado==='Apto para Semilla').length;
+  const cuarentena=lotes.filter(l=>l.Estado==='Cuarentena').length;
+  const accent=pdfSeedColor(tipo);
   const doc=pdfDoc();
-  pdfHeader(doc,`Reporte de inventario — ${tipo}`,`${lotes.length} lote(s) · stock total ${fmtKg(stock)} kg`);
+  pdfHeader(doc,`Reporte de inventario — ${tipo}`,`${lotes.length} lote(s) · stock total ${fmtKg(stock)} kg`,accent);
+  let y=pdfKpis(doc,38,[
+    {label:'Lotes',value:lotes.length,color:accent},
+    {label:'Stock total (kg)',value:fmtKg(stock),color:accent},
+    {label:'Aptos para semilla',value:aptos,color:PDF_COLORS.ok},
+    {label:'En cuarentena',value:cuarentena,color:PDF_COLORS.warn},
+  ]);
+  y=pdfSectionLabel(doc,y,'Detalle de lotes de '+tipo);
   const rows=lotes.map(l=>[l.ID_Lote,l.Variedad||'—',l.Hibrido||'—',fmtD(l.Fecha_Recepcion),l.Destino||'—',fmtCantidadLote(l),l.Estado]);
-  doc.autoTable({ startY:30, head:[['Lote','Variedad','Híbrido','Recepción','Destino','Stock','Estado']], body:rows.length?rows:[['—','Sin lotes de este tipo','—','—','—','—','—']], theme:'grid', headStyles:{fillColor:PDF_COLORS[tipoClass(tipo)]||PDF_COLORS.panel,textColor:[255,255,255]}, styles:{fontSize:8.5} });
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y, head:[['Lote','Variedad','Híbrido','Recepción','Destino','Stock','Estado']],
+    body:rows.length?rows:[['—','Sin lotes de este tipo','—','—','—','—','—']], headStyles:{fillColor:accent,textColor:[255,255,255],fontSize:8.5} }));
   pdfFooter(doc); pdfSave(doc,`reporte-${tipoClass(tipo)}.pdf`);
 }
 function pdfReporteSecado(mes){
   const procesos=S.DB.secado.filter(p=>String(p.Fecha||'').slice(0,7)===mes).sort((a,b)=>(parseD(a.Fecha)||0)-(parseD(b.Fecha)||0));
   const totalNeto=procesos.reduce((s,p)=>s+num(p.Peso_Neto_Limpio_kg),0);
   const totalImp=procesos.reduce((s,p)=>s+num(p.Total_Impurezas_kg),0);
+  const totalInicial=procesos.reduce((s,p)=>s+num(p.Peso_Inicial_kg),0);
+  const rendProm=totalInicial>0?round2((totalNeto/totalInicial)*100):0;
   const doc=pdfDoc();
-  pdfHeader(doc,'Reporte de secado y limpieza — Caraota',`Mes ${mes} · ${procesos.length} proceso(s) · ${fmtKg(totalNeto)} kg limpios · ${fmtKg(totalImp)} kg de impurezas retiradas`);
+  pdfHeader(doc,'Reporte de secado y limpieza — Caraota',`Mes ${mes} · ${procesos.length} proceso(s) registrados`,PDF_COLORS.caraota);
+  let y=pdfKpis(doc,38,[
+    {label:'Procesos',value:procesos.length,color:PDF_COLORS.caraota},
+    {label:'Kg limpios',value:fmtKg(totalNeto),color:PDF_COLORS.ok},
+    {label:'Kg impurezas',value:fmtKg(totalImp),color:PDF_COLORS.warn},
+    {label:'Rendimiento prom.',value:fmtPct(rendProm),color:PDF_COLORS.caraota},
+  ]);
+  y=pdfSectionLabel(doc,y,'Procesos del mes');
   const rows=procesos.map(p=>[p.ID_Lote,fmtDT(p.Fecha),fmtKg(p.Peso_Inicial_kg)+' kg',fmtKg(p.Total_Impurezas_kg)+' kg',fmtKg(p.Peso_Neto_Limpio_kg)+' kg',fmtPct(p['Rendimiento_%'])]);
-  doc.autoTable({ startY:32, head:[['Lote','Fecha','Peso inicial','Impurezas','Peso neto','Rendimiento']], body:rows.length?rows:[['—','Sin procesos este mes','—','—','—','—']], theme:'grid', headStyles:{fillColor:PDF_COLORS.caraota,textColor:[255,255,255]}, styles:{fontSize:8.5} });
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y, head:[['Lote','Fecha','Peso inicial','Impurezas','Peso neto','Rendimiento']],
+    body:rows.length?rows:[['—','Sin procesos este mes','—','—','—','—']], headStyles:{fillColor:PDF_COLORS.caraota,textColor:[255,255,255],fontSize:8.5} }));
   pdfFooter(doc); pdfSave(doc,`reporte-secado-${mes}.pdf`);
 }
 function pdfReporteSalidas(mes){
@@ -1873,56 +2695,113 @@ function pdfReporteSalidas(mes){
   const porTipo={};
   detalle.forEach(d=>{ porTipo[d.Tipo_Semilla]=porTipo[d.Tipo_Semilla]||{kg:0,sacos:0}; porTipo[d.Tipo_Semilla].kg+=num(d.Cantidad_kg); porTipo[d.Tipo_Semilla].sacos+=num(d.Cantidad_Sacos); });
   const totalKg=detalle.reduce((s,d)=>s+num(d.Cantidad_kg),0);
+  const receptores=new Set(notas.map(n=>n.Nombre_Receptor)).size;
   const doc=pdfDoc();
-  pdfHeader(doc,'Reporte de salidas / despachos',`Mes ${mes} · ${notas.length} nota(s) emitida(s) · ${fmtKg(totalKg)} kg despachados`);
+  pdfHeader(doc,'Reporte de salidas / despachos',`Mes ${mes} · ${notas.length} nota(s) emitida(s)`);
+  let y=pdfKpis(doc,38,[
+    {label:'Notas emitidas',value:notas.length,color:PDF_COLORS.oro},
+    {label:'Kg despachados',value:fmtKg(totalKg),color:PDF_COLORS.soya},
+    {label:'Receptores distintos',value:receptores,color:PDF_COLORS.otra},
+  ]);
+  y=pdfSectionLabel(doc,y,'Resumen por tipo de semilla');
   const resumen=Object.entries(porTipo).map(([t,v])=>[t,fmtKg(v.kg)+' kg',String(v.sacos)]);
-  doc.autoTable({ startY:30, head:[['Tipo de semilla','Kg despachados','Sacos']], body:resumen.length?resumen:[['—','Sin salidas este mes','—']], theme:'grid', headStyles:{fillColor:PDF_COLORS.panel,textColor:PDF_COLORS.crema}, styles:{fontSize:9} });
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y, head:[['Tipo de semilla','Kg despachados','Sacos']],
+    body:resumen.length?resumen:[['—','Sin salidas este mes','—']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
+  const y2=pdfSectionLabel(doc,doc.lastAutoTable.finalY+10,'Notas emitidas');
   const rows=notas.map(n=>{ const t=totalesNota(n.ID_Nota); return [n.ID_Nota,fmtD(n.Fecha),n.Nombre_Receptor,fmtKg(t.kg)+' kg',String(t.sacos)]; });
-  doc.autoTable({ startY:doc.lastAutoTable.finalY+8, head:[['Nota','Fecha','Receptor','Kg','Sacos']], body:rows.length?rows:[['—','—','Sin notas','—','—']], theme:'grid', headStyles:{fillColor:PDF_COLORS.panel,textColor:PDF_COLORS.crema}, styles:{fontSize:8.5} });
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y2, head:[['Nota','Fecha','Receptor','Kg','Sacos']],
+    body:rows.length?rows:[['—','—','Sin notas','—','—']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
   pdfFooter(doc); pdfSave(doc,`reporte-salidas-${mes}.pdf`);
+}
+function pdfReportePorPlan(mes){
+  const todas = !mes;
+  const notas=S.DB.notas.filter(n=>n.Estado!=='Anulada' && (todas || String(n.Fecha||'').slice(0,7)===mes)).sort((a,b)=>(parseD(a.Fecha)||0)-(parseD(b.Fecha)||0));
+  const porPlan={};
+  CONFIG.PLANES.forEach(p=>porPlan[p]={kg:0,notas:0,receptores:new Set()});
+  notas.forEach(n=>{
+    const plan=n.Plan||'General';
+    if(!porPlan[plan]) porPlan[plan]={kg:0,notas:0,receptores:new Set()};
+    const t=totalesNota(n.ID_Nota);
+    porPlan[plan].kg+=t.kg; porPlan[plan].notas+=1; porPlan[plan].receptores.add(n.Nombre_Receptor);
+  });
+  const totalKg=notas.reduce((s,n)=>s+totalesNota(n.ID_Nota).kg,0);
+  const planMasActivo=Object.entries(porPlan).sort((a,b)=>b[1].kg-a[1].kg)[0];
+  const doc=pdfDoc();
+  pdfHeader(doc,'Reporte por plan de financiamiento',todas?`Histórico completo · ${notas.length} nota(s)`:`Mes ${mes} · ${notas.length} nota(s) emitida(s)`);
+  let y=pdfKpis(doc,38,[
+    {label:'Notas emitidas',value:notas.length,color:PDF_COLORS.oro},
+    {label:'Kg despachados',value:fmtKg(totalKg),color:PDF_COLORS.soya},
+    {label:'Plan con más despacho',value:planMasActivo?planMasActivo[0]:'—',color:PDF_COLORS.otra},
+  ]);
+  y=pdfSectionLabel(doc,y,'Resumen por plan');
+  const resumen=Object.entries(porPlan).map(([p,v])=>[p,String(v.notas),fmtKg(v.kg)+' kg',String(v.receptores.size)]);
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y, head:[['Plan','Notas','Kg despachados','Receptores']],
+    body:resumen.length?resumen:[['—','—','Sin datos','—']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
+  const y2=pdfSectionLabel(doc,doc.lastAutoTable.finalY+10,'Detalle de notas');
+  const rows=notas.map(n=>{ const t=totalesNota(n.ID_Nota); return [n.ID_Nota,fmtD(n.Fecha),n.Nombre_Receptor,n.Plan||'General',fmtKg(t.kg)+' kg']; });
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y2, head:[['Nota','Fecha','Receptor','Plan','Kg']],
+    body:rows.length?rows:[['—','—','Sin notas','—','—']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
+  pdfFooter(doc); pdfSave(doc,`reporte-por-plan${todas?'-historico':'-'+mes}.pdf`);
 }
 function pdfReporteGerminacion(){
   const historial=[...S.DB.germinacion].sort((a,b)=>(parseD(b.Fecha_Prueba)||0)-(parseD(a.Fecha_Prueba)||0));
   const pendientes=germinacionesPendientes();
+  const aptos=historial.filter(h=>h.Resultado==='Apto para Semilla').length;
+  const pctApto=historial.length?round2((aptos/historial.length)*100):0;
   const doc=pdfDoc();
-  pdfHeader(doc,'Reporte de germinación',`${historial.length} prueba(s) registradas · ${pendientes.length} lote(s) pendientes`);
+  pdfHeader(doc,'Reporte de germinación',`${historial.length} prueba(s) registradas`,PDF_COLORS.soya);
+  let y=pdfKpis(doc,38,[
+    {label:'Pruebas registradas',value:historial.length,color:PDF_COLORS.soya},
+    {label:'% aptas para semilla',value:fmtPct(pctApto),color:PDF_COLORS.ok},
+    {label:'Lotes pendientes',value:pendientes.length,color:PDF_COLORS.warn},
+  ]);
+  y=pdfSectionLabel(doc,y,'Historial de pruebas');
   const rows=historial.map(h=>[h.ID_Lote,fmtD(h.Fecha_Prueba),String(h.Semillas_Probadas),String(h.Semillas_Germinadas),fmtPct(h.Porcentaje_Germinacion),h.Resultado,fmtD(h.Proxima_Prueba)]);
-  doc.autoTable({ startY:30, head:[['Lote','Fecha','Probadas','Germinadas','%','Resultado','Próxima']], body:rows.length?rows:[['—','Sin pruebas registradas','—','—','—','—','—']], theme:'grid', headStyles:{fillColor:PDF_COLORS.soya,textColor:[255,255,255]}, styles:{fontSize:8} });
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y, head:[['Lote','Fecha','Probadas','Germinadas','%','Resultado','Próxima']],
+    body:rows.length?rows:[['—','Sin pruebas registradas','—','—','—','—','—']], headStyles:{fillColor:PDF_COLORS.soya,textColor:[255,255,255],fontSize:8} }));
   pdfFooter(doc); pdfSave(doc,'reporte-germinacion.pdf');
 }
 
 function renderReportes(c){
   const mesActual=todayISO().slice(0,7);
   c.innerHTML=`
+    <div class="mini-note" style="margin-bottom:20px">${ic('filetext')} Los reportes se generan en PDF con el diseño de marca del almacén: banda de encabezado, indicadores destacados y tablas con franjas alternadas — listos para imprimir o compartir.</div>
     <div class="grid2" style="gap:22px;align-items:start">
-      <div class="card" style="padding:22px">
+      <div class="card" style="padding:22px;border-top:3px solid var(--maiz)">
         <div class="section-title">Inventario</div>
         <h3 style="margin-bottom:6px">Reporte general</h3>
-        <div class="sub" style="font-size:12.5px;color:var(--faint);margin-bottom:16px">Stock actual de todos los lotes y tipos de semilla</div>
+        <div class="sub" style="font-size:12.5px;color:var(--faint);margin-bottom:16px">Indicadores clave + stock por tipo + detalle completo de lotes</div>
         <button class="btn btn-primary btn-block" id="repGeneral">${ic('download')} Descargar PDF</button>
       </div>
-      <div class="card" style="padding:22px">
+      <div class="card" style="padding:22px;border-top:3px solid var(--otra)">
         <div class="section-title">Por tipo de semilla</div>
         <h3 style="margin-bottom:6px">Reporte por semilla</h3>
         <div class="field" style="margin:0 0 14px"><select id="repTipoSel">${CONFIG.TIPOS_SEMILLA.map(t=>`<option value="${esc(t)}">${esc(t)}</option>`).join('')}</select></div>
         <button class="btn btn-primary btn-block" id="repTipo">${ic('download')} Descargar PDF</button>
       </div>
-      <div class="card" style="padding:22px">
+      <div class="card" style="padding:22px;border-top:3px solid var(--caraota)">
         <div class="section-title">Secado y limpieza</div>
         <h3 style="margin-bottom:6px">Reporte de caraota</h3>
         <div class="field" style="margin:0 0 14px"><input type="month" id="repMesSecado" value="${mesActual}"></div>
         <button class="btn btn-primary btn-block" id="repSecado">${ic('download')} Descargar PDF</button>
       </div>
-      <div class="card" style="padding:22px">
+      <div class="card" style="padding:22px;border-top:3px solid var(--maiz-lt)">
         <div class="section-title">Despachos</div>
         <h3 style="margin-bottom:6px">Reporte de salidas</h3>
         <div class="field" style="margin:0 0 14px"><input type="month" id="repMesSalidas" value="${mesActual}"></div>
         <button class="btn btn-primary btn-block" id="repSalidas">${ic('download')} Descargar PDF</button>
       </div>
-      <div class="card" style="padding:22px">
+      <div class="card" style="padding:22px;border-top:3px solid var(--otra)">
+        <div class="section-title">Financiamiento</div>
+        <h3 style="margin-bottom:6px">Reporte por plan</h3>
+        <div class="sub" style="font-size:12.5px;color:var(--faint);margin-bottom:10px">FINAGRO, Agrotendencias, General... — deja el mes vacío para ver el histórico completo</div>
+        <div class="field" style="margin:0 0 14px"><input type="month" id="repMesPlan" value="${mesActual}"><div class="hint" style="margin-top:4px"><a href="javascript:void(0)" id="repPlanTodos" style="text-transform:none;font-weight:600;color:var(--maiz-lt)">usar histórico completo (todos los meses)</a></div></div>
+        <button class="btn btn-primary btn-block" id="repPlan">${ic('download')} Descargar PDF</button>
+      </div>
+      <div class="card" style="padding:22px;border-top:3px solid var(--soya)">
         <div class="section-title">Calidad de semilla</div>
         <h3 style="margin-bottom:6px">Reporte de germinación</h3>
-        <div class="sub" style="font-size:12.5px;color:var(--faint);margin-bottom:16px">Historial completo de pruebas y lotes pendientes</div>
+        <div class="sub" style="font-size:12.5px;color:var(--faint);margin-bottom:16px">Historial completo de pruebas, % de aptitud y lotes pendientes</div>
         <button class="btn btn-primary btn-block" id="repGerm">${ic('download')} Descargar PDF</button>
       </div>
     </div>`;
@@ -1931,6 +2810,8 @@ function renderReportes(c){
   $('#repSecado').onclick=()=>pdfReporteSecado($('#repMesSecado').value||mesActual);
   $('#repSalidas').onclick=()=>pdfReporteSalidas($('#repMesSalidas').value||mesActual);
   $('#repGerm').onclick=()=>pdfReporteGerminacion();
+  $('#repPlan').onclick=()=>pdfReportePorPlan($('#repMesPlan').value);
+  $('#repPlanTodos').onclick=()=>{ $('#repMesPlan').value=''; };
 }
 
 /* ======================= USUARIOS (Administrador) ======================= */
@@ -2036,8 +2917,10 @@ function renderAuditoria(c){
 
 /* ======================= INICIALIZACIÓN ======================= */
 async function init(){
+  cargarRubrosPersonalizados();
+  cargarPlanesPersonalizados();
   await API.bootstrap();
-  const lotesActivos = S.DB.lotes.filter(l=>l.Estado!=='Agotado').length;
+  const lotesActivos = S.DB.lotes.filter(l=>l.Estado!=='Agotado'&&l.Estado!=='Dividido').length;
   const stock = stockTotal();
   const variedades = new Set(S.DB.lotes.map(l=>l.Variedad).filter(Boolean)).size;
   $('#ls1').textContent = lotesActivos;
