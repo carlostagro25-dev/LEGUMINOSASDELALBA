@@ -445,7 +445,7 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
    =================================================================== */
 /* ======================= CONFIGURACIÓN ======================= */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbwFiMMDdNiyxDBtYkFRSPdi6thrHfqF2eCIvJTCtJyY-4MD_iBpn4gpOI6zg3Jj5wM/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
+  API_URL: 'https://script.google.com/macros/s/AKfycbyl0aAbpJycPCccJWTPzlD8zYLMYZO_PlL8E10c6j-Jq0T6i_VXRMA4L-xS6qH8TWUn/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
   ALMACEN_NOMBRE: 'Almacén Leguminosas del Alba',
   GERMINACION_UMBRAL_APTO: 80,
   GERMINACION_DIAS_PROXIMA: 30,
@@ -766,7 +766,20 @@ function stBadgeCustodia(e){ return `<span class="st-badge ${estadoCustodiaClass
 function fmtCantidadCustodia(r,kg,sacos){
   const k = kg===undefined? r.Cantidad_Actual_kg : kg;
   const s = sacos===undefined? r.Cantidad_Sacos_Actual : sacos;
+  if(r.Tipo_Semilla==='Maíz'){
+    const pxs = num(r.Peso_Por_Saco_kg)||50;
+    const sacosCalc = num(s)>0 ? num(s) : round2(num(k)/pxs);
+    return fmtKg(sacosCalc)+' sacos';
+  }
   return fmtKg(k)+' kg'+(num(s)>0?' · '+fmtKg(s)+' sacos':'');
+}
+function fmtCantidadCustodiaInicial(r){
+  if(r.Tipo_Semilla==='Maíz'){
+    const pxs = num(r.Peso_Por_Saco_kg)||50;
+    const sacosCalc = num(r.Cantidad_Sacos_Inicial)>0 ? num(r.Cantidad_Sacos_Inicial) : round2(num(r.Cantidad_Inicial_kg)/pxs);
+    return fmtKg(sacosCalc)+' sacos';
+  }
+  return fmtKg(r.Cantidad_Inicial_kg)+' kg'+(num(r.Cantidad_Sacos_Inicial)>0?' · '+fmtKg(r.Cantidad_Sacos_Inicial)+' sacos':'');
 }
 
 /* ======================= ESTADO GLOBAL ======================= */
@@ -827,6 +840,16 @@ function fmtCantidadKg(lote,kg){
   return fmtKg(k)+' kg';
 }
 function fmtCantidadLote(lote){ return fmtCantidadKg(lote, lote?lote.Stock_Actual_kg:0); }
+/* Igual que fmtCantidadKg pero sin necesitar un objeto "lote" completo — útil para
+   líneas de nota de salida, resúmenes de reportes, etc. Si no hay conteo de sacos
+   guardado, lo estima con 50kg por saco (el estándar del almacén). */
+function fmtCantidadTipo(tipo, kg, sacos){
+  if(tipo==='Maíz'){
+    const s = num(sacos)>0 ? num(sacos) : round2(num(kg)/50);
+    return fmtKg(s)+' sacos';
+  }
+  return fmtKg(kg)+' kg';
+}
 
 async function crearLote(lote){
   const prefix = CONFIG.PREFIJOS[lote.Tipo_Semilla]||'OT';
@@ -1323,7 +1346,7 @@ function renderCustodiaView(c){
           <td>${seedBadge(r.Tipo_Semilla)}</td>
           <td>${esc(r.Variedad||'—')}</td>
           <td>${fmtD(r.Fecha_Ingreso)}</td>
-          <td class="num">${fmtCantidadCustodia(r)} <span style="color:var(--faint);font-size:11px">/ ${fmtKg(r.Cantidad_Inicial_kg)} kg${num(r.Cantidad_Sacos_Inicial)>0?' · '+fmtKg(r.Cantidad_Sacos_Inicial)+' sacos':''}</span></td>
+          <td class="num">${fmtCantidadCustodia(r)} <span style="color:var(--faint);font-size:11px">/ ${fmtCantidadCustodiaInicial(r)}</span></td>
           <td>${stBadgeCustodia(r.Estado)}</td>
           <td>${ic('chevronright')}</td>
         </tr>`).join('')}
@@ -1398,7 +1421,7 @@ function abrirDetalleCustodia(id){
         <div class="detail-item" style="padding:12px;background:var(--panel-2);border-radius:var(--r-sm);font-size:13px"><strong style="display:block;color:var(--faint);font-size:11px;text-transform:uppercase;margin-bottom:4px">Estado</strong>${stBadgeCustodia(r.Estado)}</div>
       </div>
       <div class="res-row total" style="padding:12px 16px;background:var(--panel-2);border-radius:var(--r-sm);margin-bottom:16px">
-        <span class="l">Cantidad actual en custodia</span><span class="v">${fmtCantidadCustodia(r)} <span style="font-size:13px;color:var(--faint);font-family:inherit">de ${fmtKg(r.Cantidad_Inicial_kg)} kg${num(r.Cantidad_Sacos_Inicial)>0?' · '+fmtKg(r.Cantidad_Sacos_Inicial)+' sacos':''} ingresados</span></span>
+        <span class="l">Cantidad actual en custodia</span><span class="v">${fmtCantidadCustodia(r)} <span style="font-size:13px;color:var(--faint);font-family:inherit">de ${fmtCantidadCustodiaInicial(r)} ingresados</span></span>
       </div>
       ${r.Observaciones?`<div class="mini-note" style="margin-bottom:16px">${ic('info')} ${esc(r.Observaciones)}</div>`:''}
       <div class="section-title">Movimientos</div>
@@ -1452,7 +1475,7 @@ function custodiaQRText(r){
   L.push('Registro: '+r.ID_Custodia);
   L.push('Depositante: '+r.Depositante+(r.Cedula_RIF?' · '+r.Cedula_RIF:''));
   L.push('Semilla: '+r.Tipo_Semilla+(r.Variedad?' · '+r.Variedad:''));
-  L.push('Cantidad actual: '+fmtCantidadCustodia(r)+' (de '+fmtKg(r.Cantidad_Inicial_kg)+' kg'+(num(r.Cantidad_Sacos_Inicial)>0?' · '+fmtKg(r.Cantidad_Sacos_Inicial)+' sacos':'')+' ingresados)');
+  L.push('Cantidad actual: '+fmtCantidadCustodia(r)+' (de '+fmtCantidadCustodiaInicial(r)+' ingresados)');
   L.push('Desde: '+fmtD(r.Fecha_Ingreso));
   L.push('Estado: '+r.Estado);
   return L.join('\n');
@@ -1509,7 +1532,7 @@ function imprimirComprobanteCustodia(r){
       <div class="kv"><span>Ingresó el</span><b>${fmtD(r.Fecha_Ingreso)}</b></div>
       <div class="kv"><span>Estado</span><b>${esc(r.Estado)}</b></div>
     </div>
-    <div class="total-box"><div class="l">Cantidad actual en custodia</div><div class="v">${fmtKg(r.Cantidad_Actual_kg)} kg</div>${num(r.Cantidad_Sacos_Actual)>0?`<div style="font-size:11px;color:var(--oro);margin-top:4px">${fmtKg(r.Cantidad_Sacos_Actual)} sacos</div>`:''}</div>
+    <div class="total-box"><div class="l">Cantidad actual en custodia</div><div class="v">${fmtCantidadCustodia(r)}</div></div>
     <div class="qr-row"><div id="qrBox"></div><div class="lab">Verificación</div></div>
   </div>
   <div class="pie">Almacén Leguminosas del Alba · Servicio de almacenamiento de terceros · Impreso ${fmtDT(nowStamp())}</div>
@@ -1691,15 +1714,18 @@ function abrirPasaporte(id){
   const secados=secadosDeLote(id), germs=germinacionesDeLote(id);
   const salidas=S.DB.detalle.filter(d=>d.ID_Lote===id).map(d=>({...d,nota:S.DB.notas.find(n=>n.ID_Nota===d.ID_Nota)})).filter(x=>x.nota);
 
+  const entradasExtra = S.DB.movimientos.filter(m=>m.ID_Lote===id && m.Tipo_Movimiento==='Entrada_Adicional');
+
   let eventos=[{tipo:'recepcion',fecha:lote.Fecha_Recepcion,data:lote}];
+  entradasExtra.forEach(m=>eventos.push({tipo:'entrada_extra',fecha:m.Fecha,data:m}));
   secados.forEach(s=>eventos.push({tipo:'secado',fecha:s.Fecha,data:s}));
   germs.forEach(g=>eventos.push({tipo:'germinacion',fecha:g.Fecha_Prueba,data:g}));
   salidas.forEach(s=>eventos.push({tipo:'salida',fecha:s.nota.Fecha,data:s}));
   eventos.sort((a,b)=>(parseD(a.fecha)||0)-(parseD(b.fecha)||0));
 
-  const stampIcon={recepcion:'package',secado:'droplet',germinacion:'sprout',salida:'truck'};
-  const stampColor={recepcion:'var(--maiz-lt)',secado:'var(--caraota-lt)',germinacion:'var(--soya-lt)',salida:'var(--otra-lt)'};
-  const stampTitle={recepcion:'Recepción del lote',secado:'Secado y limpieza',germinacion:'Prueba de germinación',salida:'Salida por despacho'};
+  const stampIcon={recepcion:'package',entrada_extra:'package',secado:'droplet',germinacion:'sprout',salida:'truck'};
+  const stampColor={recepcion:'var(--maiz-lt)',entrada_extra:'var(--soya-lt)',secado:'var(--caraota-lt)',germinacion:'var(--soya-lt)',salida:'var(--otra-lt)'};
+  const stampTitle={recepcion:'Recepción del lote',entrada_extra:'Entrada adicional al lote',secado:'Secado y limpieza',germinacion:'Prueba de germinación',salida:'Salida por despacho'};
 
   const stepsHtml=eventos.map(ev=>{
     let desc='',kvs='';
@@ -1715,6 +1741,13 @@ function abrirPasaporte(id){
            + kv('Acondicionado',fmtPct(ev.data.Porcentaje_Acondicionado));
       }
       kvs+=kv('Registrado por',ev.data.Registrado_Por||'—');
+    } else if(ev.tipo==='entrada_extra'){
+      const cantTxt = esPorSacos(lote) ? fmtCantidadKg(lote,ev.data.Cantidad_kg) : fmtKg(ev.data.Cantidad_kg)+' kg';
+      desc=`${cantTxt} más recibidos${ev.data.Motivo?' · '+esc(ev.data.Motivo):''}`;
+      kvs=kv('Cantidad',fmtKg(ev.data.Cantidad_kg)+' kg');
+      if(esPorSacos(lote)) kvs+=kv('Sacos',fmtKg(round2(num(ev.data.Cantidad_kg)/pesoPorSaco(lote))));
+      kvs+=kv('Registrado por',ev.data.Usuario||'—');
+      if(ev.data.Observaciones) kvs+=kv('Observaciones',ev.data.Observaciones);
     } else if(ev.tipo==='secado'){
       desc=`Humedad ${ev.data['Humedad_Inicial_%']}% → ${ev.data['Humedad_Final_%']}% · Impurezas totales ${fmtKg(ev.data.Total_Impurezas_kg)} kg`;
       kvs=kv('Peso neto limpio',fmtKg(ev.data.Peso_Neto_Limpio_kg)+' kg')+kv('Rendimiento',fmtPct(ev.data['Rendimiento_%']))+kv('Registrado por',ev.data.Registrado_Por||'—');
@@ -1753,6 +1786,7 @@ function abrirPasaporte(id){
     <div class="modal-body" style="padding:0"><div class="timeline">${stepsHtml||'<div class="tl-empty">Sin eventos registrados.</div>'}</div></div>
     <div class="modal-foot">
       <button class="btn btn-outline" id="ppEtiqueta">${ic('qrcode')} Imprimir etiqueta</button>
+      ${canWrite()?`<button class="btn btn-ghost" id="ppEntrada">${ic('plus')} Agregar entrada</button>`:''}
       ${canWrite()&&lote.Tipo_Semilla==='Caraota'?`<button class="btn btn-ghost" id="ppSecado">${ic('droplet')} Registrar secado</button>`:''}
       ${canWrite()?`<button class="btn btn-ghost" id="ppGerm">${ic('sprout')} Registrar germinación</button>`:''}
       ${canWrite()&&num(lote.Stock_Actual_kg)>0?`<button class="btn btn-ghost" id="ppDividir">${ic('shuffle')} Dividir lote</button>`:''}
@@ -1761,10 +1795,52 @@ function abrirPasaporte(id){
     </div>`;
   openModal(html,{wide:true});
   if($('#ppEtiqueta')) $('#ppEtiqueta').onclick=()=>abrirEtiquetaLote(lote.ID_Lote);
+  if($('#ppEntrada')) $('#ppEntrada').onclick=()=>{ closeModal(); abrirModalEntradaAdicional(lote.ID_Lote); };
   if($('#ppSecado')) $('#ppSecado').onclick=()=>{ closeModal(); setView('secado'); S.sub.loteId=lote.ID_Lote; renderView(); };
   if($('#ppGerm')) $('#ppGerm').onclick=()=>{ closeModal(); abrirModalGerminacion(lote.ID_Lote); };
   if($('#ppDividir')) $('#ppDividir').onclick=()=>{ closeModal(); abrirModalDividirLote(lote.ID_Lote); };
   if($('#ppAjuste')) $('#ppAjuste').onclick=()=>{ closeModal(); abrirModalAjuste(lote.ID_Lote); };
+}
+
+/* ======================= ENTRADA ADICIONAL A UN LOTE EXISTENTE ======================= */
+function abrirModalEntradaAdicional(loteId){
+  if(!canWrite()) return;
+  const lote=loteById(loteId); if(!lote) return;
+  const esMaiz=lote.Tipo_Semilla==='Maíz';
+  const pxs=pesoPorSaco(lote);
+  const html=`
+    <div class="modal-head"><div><h3>${ic('plus')} Agregar entrada — ${esc(lote.ID_Lote)}</h3><div class="sub">Para cuando llega más mercancía del mismo lote en despachos distintos (hoy uno, mañana otro...)</div></div><button class="modal-close" onclick="closeModal()">${ic('x')}</button></div>
+    <div class="modal-body">
+      <div class="mini-note" style="margin-bottom:16px">${ic('info')} ${esc(lote.Tipo_Semilla)} · ${esc(lote.Variedad||'—')} · Stock actual: <b>${fmtCantidadLote(lote)}</b></div>
+      ${esMaiz?`
+      <div class="grid2">
+        <div class="field"><label>Sacos que llegan</label><input id="eaSacos" type="number" min="0" step="1" placeholder="0"></div>
+        <div class="field"><label>Kg (auto · ${fmtKg(pxs)} kg/saco)</label><div class="mono" id="eaKgAuto" style="padding:11px 0;font-size:13px;color:var(--faint)">0 kg</div></div>
+      </div>`:`
+      <div class="field"><label>Cantidad que llega (kg)</label><input id="eaKg" type="number" min="0" step="0.01" placeholder="0"></div>`}
+      <div class="grid2">
+        <div class="field"><label>Fecha de esta entrada</label><input id="eaFecha" type="date" value="${todayISO()}"></div>
+        <div class="field"><label>Proveedor / procedencia</label><input id="eaProveedor" placeholder="Opcional, si es distinto al original"></div>
+      </div>
+      <div class="field"><label>Observaciones</label><textarea id="eaObs" placeholder="Ej. Segundo despacho del mismo pedido..."></textarea></div>
+    </div>
+    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="eaGuardar">${ic('checkcircle')} Registrar entrada</button></div>`;
+  openModal(html);
+  if(esMaiz){
+    const eaSacos=$('#eaSacos'), eaKgAuto=$('#eaKgAuto');
+    eaSacos.oninput=()=>{ const kg=round2(num(eaSacos.value)*pxs); eaKgAuto.textContent=fmtKg(kg)+' kg'; };
+  }
+  $('#eaGuardar').onclick=async()=>{
+    const kg = esMaiz ? round2(num($('#eaSacos').value)*pxs) : num($('#eaKg').value);
+    if(kg<=0){ toast(esMaiz?'Indica cuántos sacos llegaron':'Indica la cantidad que llegó',true); return; }
+    const proveedor=$('#eaProveedor').value.trim();
+    const motivo='Entrada adicional'+(proveedor?' — '+proveedor:'')+' ('+fmtD($('#eaFecha').value||todayISO())+')';
+    const mov={ID_Lote:lote.ID_Lote, Tipo_Movimiento:'Entrada_Adicional', Cantidad_kg:kg, Motivo:motivo, Usuario:S.user.Email, Observaciones:$('#eaObs').value.trim()};
+    $('#eaGuardar').disabled=true; $('#eaGuardar').textContent='Guardando...';
+    const ok=await registrarMovimiento(mov);
+    if(ok){ closeModal(); toast('Entrada agregada a '+lote.ID_Lote); renderView(); abrirPasaporte(lote.ID_Lote); }
+    else { $('#eaGuardar').disabled=false; $('#eaGuardar').innerHTML=ic('checkcircle')+' Registrar entrada'; }
+  };
 }
 
 /* ======================= DIVISIÓN DE LOTES ======================= */
@@ -2131,12 +2207,12 @@ function abrirModalGerminacion(loteId){
 }
 
 /* ======================= MOVIMIENTOS (KARDEX) ======================= */
-function movBadgeClass(t){ if(t==='Entrada'||t==='Devolución') return 'ok'; if(t==='Salida') return 'bad'; if(t==='Merma_Limpieza') return 'warn'; return 'info'; }
+function movBadgeClass(t){ if(t==='Entrada'||t==='Entrada_Adicional'||t==='Devolución') return 'ok'; if(t==='Salida') return 'bad'; if(t==='Merma_Limpieza') return 'warn'; return 'info'; }
 
 function renderMovimientos(c){
   S.sub.filtroMov = S.sub.filtroMov || 'Todos';
   S.sub.buscaMov = S.sub.buscaMov || '';
-  const tipos=['Todos','Entrada','Salida','Ajuste','Devolución','Merma_Limpieza'];
+  const tipos=['Todos','Entrada','Entrada_Adicional','Salida','Ajuste','Devolución','Merma_Limpieza'];
   let movs=[...S.DB.movimientos];
   if(S.sub.filtroMov!=='Todos') movs=movs.filter(m=>m.Tipo_Movimiento===S.sub.filtroMov);
   if(S.sub.buscaMov){ const q=S.sub.buscaMov.toLowerCase(); movs=movs.filter(m=>[m.ID_Lote,m.Motivo,m.Usuario,m.ID_Nota].some(v=>String(v||'').toLowerCase().includes(q))); }
@@ -2294,9 +2370,9 @@ function abrirDetalleNota(idNota){
       </div>
       <div class="field"><label>Plan</label><div style="padding:2px 0"><span class="st-badge info">${esc(nota.Plan||'General')}</span></div></div>
       <div class="section-title">Productos despachados</div>
-      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lote</th><th>Semilla</th><th>Variedad/Híbrido</th><th class="num">Kg</th><th class="num">Sacos</th></tr></thead><tbody>
-      ${lineas.map(d=>`<tr><td class="idcode">${esc(d.ID_Lote)}</td><td>${seedBadge(d.Tipo_Semilla)}</td><td>${esc(d.Variedad_Hibrido||'—')}</td><td class="num">${fmtKg(d.Cantidad_kg)} kg</td><td class="num">${d.Cantidad_Sacos||0}</td></tr>`).join('')}
-      </tbody><tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;color:var(--mute)">Total</td><td class="num" style="font-weight:700;color:var(--texto)">${fmtKg(t.kg)} kg</td><td class="num" style="font-weight:700;color:var(--texto)">${t.sacos}</td></tr></tfoot></table></div>
+      <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lote</th><th>Semilla</th><th>Variedad/Híbrido</th><th class="num">Cantidad</th></tr></thead><tbody>
+      ${lineas.map(d=>`<tr><td class="idcode">${esc(d.ID_Lote)}</td><td>${seedBadge(d.Tipo_Semilla)}</td><td>${esc(d.Variedad_Hibrido||'—')}</td><td class="num">${fmtCantidadTipo(d.Tipo_Semilla,d.Cantidad_kg,d.Cantidad_Sacos)}</td></tr>`).join('')}
+      </tbody><tfoot><tr><td colspan="3" style="text-align:right;font-weight:700;color:var(--mute)">Total</td><td class="num" style="font-weight:700;color:var(--texto)">${fmtKg(t.kg)} kg</td></tr></tfoot></table></div>
       ${nota.Observaciones?`<div class="mini-note" style="margin-top:14px">${ic('info')} ${esc(nota.Observaciones)}</div>`:''}
       <div id="anularBox"></div>
     </div>
@@ -2334,8 +2410,7 @@ function imprimirNota(nota,lineas,t){
       <td><span class="dot" style="background:var(--${tipoClass(d.Tipo_Semilla)})"></span>${esc(d.Tipo_Semilla)}</td>
       <td>${esc(d.Variedad_Hibrido||'—')}</td>
       <td style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#6B7280">${esc(d.ID_Lote)}</td>
-      <td class="num">${fmtKg(d.Cantidad_kg)}</td>
-      <td class="num">${d.Cantidad_Sacos||0}</td>
+      <td class="num">${fmtCantidadTipo(d.Tipo_Semilla,d.Cantidad_kg,d.Cantidad_Sacos)}</td>
     </tr>`).join('');
   const obsBlock = nota.Observaciones ? `<div class="obs"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="flex:none;margin-top:1px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> ${esc(nota.Observaciones)}</div>` : '';
   const qrText = JSON.stringify(notaQRText(nota,t));
@@ -2432,7 +2507,7 @@ function imprimirNota(nota,lineas,t){
       </div>
     </div>
     <div class="sect">Productos despachados</div>
-    <table><thead><tr><th>Semilla</th><th>Variedad / Híbrido</th><th>Lote</th><th class="num">Kg</th><th class="num">Sacos</th></tr></thead>
+    <table><thead><tr><th>Semilla</th><th>Variedad / Híbrido</th><th>Lote</th><th class="num">Cantidad</th></tr></thead>
     <tbody>${rowsHtml}</tbody></table>
     <div class="total-box"><div class="total-inner"><div class="l">Total despachado</div><div class="v">${fmtKg(t.kg)} kg</div></div></div>
     ${obsBlock}
@@ -2640,7 +2715,14 @@ function pdfReporteGeneral(){
     {label:'Aptos para semilla',value:aptos,color:PDF_COLORS.ok},
   ]);
   y=pdfSectionLabel(doc,y,'Stock por tipo de semilla');
-  const resumen=CONFIG.TIPOS_SEMILLA.map(t=>[t,fmtKg(porTipo[t]||0)+' kg']);
+  const resumen=CONFIG.TIPOS_SEMILLA.map(t=>{
+    if(t==='Maíz'){
+      const lotesM=S.DB.lotes.filter(l=>l.Tipo_Semilla==='Maíz');
+      const sacosM=round2(lotesM.reduce((s,l)=>s+num(l.Stock_Actual_kg)/pesoPorSaco(l),0));
+      return [t,fmtKg(sacosM)+' sacos'];
+    }
+    return [t,fmtKg(porTipo[t]||0)+' kg'];
+  });
   doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y, head:[['Tipo de semilla','Stock actual']],
     body:resumen.length?resumen:[['—','Sin datos']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
   const y2=pdfSectionLabel(doc,doc.lastAutoTable.finalY+10,'Detalle de lotes');
@@ -2652,14 +2734,17 @@ function pdfReporteGeneral(){
 function pdfReportePorTipo(tipo){
   const lotes=[...S.DB.lotes].filter(l=>l.Tipo_Semilla===tipo).sort((a,b)=>(parseD(b.Fecha_Recepcion)||0)-(parseD(a.Fecha_Recepcion)||0));
   const stock=lotes.reduce((s,l)=>s+num(l.Stock_Actual_kg),0);
+  const esMaiz=tipo==='Maíz';
+  const stockSacos=esMaiz?round2(lotes.reduce((s,l)=>s+num(l.Stock_Actual_kg)/pesoPorSaco(l),0)):0;
+  const stockDisp=esMaiz?fmtKg(stockSacos)+' sacos':fmtKg(stock)+' kg';
   const aptos=lotes.filter(l=>l.Estado==='Apto para Semilla').length;
   const cuarentena=lotes.filter(l=>l.Estado==='Cuarentena').length;
   const accent=pdfSeedColor(tipo);
   const doc=pdfDoc();
-  pdfHeader(doc,`Reporte de inventario — ${tipo}`,`${lotes.length} lote(s) · stock total ${fmtKg(stock)} kg`,accent);
+  pdfHeader(doc,`Reporte de inventario — ${tipo}`,`${lotes.length} lote(s) · stock total ${stockDisp}`,accent);
   let y=pdfKpis(doc,38,[
     {label:'Lotes',value:lotes.length,color:accent},
-    {label:'Stock total (kg)',value:fmtKg(stock),color:accent},
+    {label:esMaiz?'Stock total (sacos)':'Stock total (kg)',value:esMaiz?fmtKg(stockSacos):fmtKg(stock),color:accent},
     {label:'Aptos para semilla',value:aptos,color:PDF_COLORS.ok},
     {label:'En cuarentena',value:cuarentena,color:PDF_COLORS.warn},
   ]);
@@ -2704,13 +2789,13 @@ function pdfReporteSalidas(mes){
     {label:'Receptores distintos',value:receptores,color:PDF_COLORS.otra},
   ]);
   y=pdfSectionLabel(doc,y,'Resumen por tipo de semilla');
-  const resumen=Object.entries(porTipo).map(([t,v])=>[t,fmtKg(v.kg)+' kg',String(v.sacos)]);
-  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y, head:[['Tipo de semilla','Kg despachados','Sacos']],
-    body:resumen.length?resumen:[['—','Sin salidas este mes','—']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
+  const resumen=Object.entries(porTipo).map(([t,v])=>[t,fmtCantidadTipo(t,v.kg,v.sacos)]);
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y, head:[['Tipo de semilla','Cantidad despachada']],
+    body:resumen.length?resumen:[['—','Sin salidas este mes']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
   const y2=pdfSectionLabel(doc,doc.lastAutoTable.finalY+10,'Notas emitidas');
-  const rows=notas.map(n=>{ const t=totalesNota(n.ID_Nota); return [n.ID_Nota,fmtD(n.Fecha),n.Nombre_Receptor,fmtKg(t.kg)+' kg',String(t.sacos)]; });
-  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y2, head:[['Nota','Fecha','Receptor','Kg','Sacos']],
-    body:rows.length?rows:[['—','—','Sin notas','—','—']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
+  const rows=notas.map(n=>{ const t=totalesNota(n.ID_Nota); return [n.ID_Nota,fmtD(n.Fecha),n.Nombre_Receptor,fmtKg(t.kg)+' kg']; });
+  doc.autoTable(Object.assign({},PDF_TABLE_BASE,{ startY:y2, head:[['Nota','Fecha','Receptor','Kg']],
+    body:rows.length?rows:[['—','—','Sin notas','—']], headStyles:{fillColor:PDF_COLORS.banda,textColor:[255,255,255],fontSize:8.5} }));
   pdfFooter(doc); pdfSave(doc,`reporte-salidas-${mes}.pdf`);
 }
 function pdfReportePorPlan(mes){
