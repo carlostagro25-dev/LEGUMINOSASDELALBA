@@ -763,24 +763,45 @@ function estadoClass(e){ if(e==='Apto para Semilla') return 'ok'; if(e==='Cuaren
 function stBadge(e){ return `<span class="st-badge ${estadoClass(e)}">${esc(e||'—')}</span>`; }
 function estadoCustodiaClass(e){ if(e==='En custodia') return 'ok'; if(e==='Retirado') return 'mute'; return 'mute'; }
 function stBadgeCustodia(e){ return `<span class="st-badge ${estadoCustodiaClass(e)}">${esc(e||'—')}</span>`; }
-function fmtCantidadCustodia(r,kg,sacos){
+
+/* ===== FUNCIONES MODIFICADAS PARA MOSTRAR SIEMPRE EN SACOS ===== */
+function fmtCantidadCustodia(r, kg, sacos){
   const k = kg===undefined? r.Cantidad_Actual_kg : kg;
   const s = sacos===undefined? r.Cantidad_Sacos_Actual : sacos;
-  if(r.Tipo_Semilla==='Maíz'){
-    const pxs = num(r.Peso_Por_Saco_kg)||50;
-    const sacosCalc = num(s)>0 ? num(s) : round2(num(k)/pxs);
-    return fmtKg(sacosCalc)+' sacos';
-  }
-  return fmtKg(k)+' kg'+(num(s)>0?' · '+fmtKg(s)+' sacos':'');
+  const pxs = num(r.Peso_Por_Saco_kg)||50;
+  let sacosCalc = num(s)>0 ? num(s) : round2(num(k)/pxs);
+  return fmtKg(sacosCalc) + ' sacos' + (num(k)>0 ? ' (' + fmtKg(k) + ' kg)' : '');
 }
+
 function fmtCantidadCustodiaInicial(r){
-  if(r.Tipo_Semilla==='Maíz'){
-    const pxs = num(r.Peso_Por_Saco_kg)||50;
-    const sacosCalc = num(r.Cantidad_Sacos_Inicial)>0 ? num(r.Cantidad_Sacos_Inicial) : round2(num(r.Cantidad_Inicial_kg)/pxs);
-    return fmtKg(sacosCalc)+' sacos';
-  }
-  return fmtKg(r.Cantidad_Inicial_kg)+' kg'+(num(r.Cantidad_Sacos_Inicial)>0?' · '+fmtKg(r.Cantidad_Sacos_Inicial)+' sacos':'');
+  const pxs = num(r.Peso_Por_Saco_kg)||50;
+  let sacosCalc = num(r.Cantidad_Sacos_Inicial)>0 ? num(r.Cantidad_Sacos_Inicial) : round2(num(r.Cantidad_Inicial_kg)/pxs);
+  return fmtKg(sacosCalc) + ' sacos' + (num(r.Cantidad_Inicial_kg)>0 ? ' (' + fmtKg(r.Cantidad_Inicial_kg) + ' kg)' : '');
 }
+/* ===== FIN DE FUNCIONES MODIFICADAS ===== */
+
+/* ---------- otras funciones ---------- */
+function fmtCantidadKg(lote,kg){
+  const k=num(kg);
+  if(esPorSacos(lote)){
+    if(Math.abs(k-num(lote.Stock_Actual_kg))<0.01 && lote.Cantidad_Sacos_Actual!==undefined && lote.Cantidad_Sacos_Actual!==''){
+      return fmtKg(num(lote.Cantidad_Sacos_Actual))+' sacos';
+    }
+    return fmtKg(round2(k/pesoPorSaco(lote)))+' sacos';
+  }
+  return fmtKg(k)+' kg';
+}
+function fmtCantidadLote(lote){ return fmtCantidadKg(lote, lote?lote.Stock_Actual_kg:0); }
+function fmtCantidadTipo(tipo, kg, sacos){
+  if(tipo==='Maíz'){
+    const s = num(sacos)>0 ? num(sacos) : round2(num(kg)/50);
+    return fmtKg(s)+' sacos';
+  }
+  return fmtKg(kg)+' kg';
+}
+
+function pesoPorSaco(lote){ const v=num(lote&&lote.Peso_Por_Saco_kg); return v>0?v:50; }
+function esPorSacos(lote){ return !!lote && lote.Tipo_Semilla==='Maíz'; }
 
 /* ======================= ESTADO GLOBAL ======================= */
 const S = { DB:{}, user:null, view:'dashboard', online:false, sub:{} };
@@ -833,33 +854,6 @@ function calcPesoFinalCaraota(pesoInicial,humedad,secado,pureza,acondicionado){
   if(pi<=0 || a<=0 || s>=1) return 0;
   return round2(pi*((1-h)/(1-s))*(p/a));
 }
-/* ---------- maíz: manejo por sacos ---------- */
-function pesoPorSaco(lote){ const v=num(lote&&lote.Peso_Por_Saco_kg); return v>0?v:50; }
-function esPorSacos(lote){ return !!lote && lote.Tipo_Semilla==='Maíz'; }
-function fmtCantidadKg(lote,kg){
-  const k=num(kg);
-  if(esPorSacos(lote)){
-    // El conteo real de sacos se acumula movimiento a movimiento (cada entrada puede
-    // traer sacos de peso distinto), así que si el kg pedido es el stock actual del
-    // lote usamos el contador real; si no, lo estimamos con el peso por saco.
-    if(Math.abs(k-num(lote.Stock_Actual_kg))<0.01 && lote.Cantidad_Sacos_Actual!==undefined && lote.Cantidad_Sacos_Actual!==''){
-      return fmtKg(num(lote.Cantidad_Sacos_Actual))+' sacos';
-    }
-    return fmtKg(round2(k/pesoPorSaco(lote)))+' sacos';
-  }
-  return fmtKg(k)+' kg';
-}
-function fmtCantidadLote(lote){ return fmtCantidadKg(lote, lote?lote.Stock_Actual_kg:0); }
-/* Igual que fmtCantidadKg pero sin necesitar un objeto "lote" completo — útil para
-   líneas de nota de salida, resúmenes de reportes, etc. Si no hay conteo de sacos
-   guardado, lo estima con 50kg por saco (el estándar del almacén). */
-function fmtCantidadTipo(tipo, kg, sacos){
-  if(tipo==='Maíz'){
-    const s = num(sacos)>0 ? num(sacos) : round2(num(kg)/50);
-    return fmtKg(s)+' sacos';
-  }
-  return fmtKg(kg)+' kg';
-}
 
 async function crearLote(lote){
   const prefix = CONFIG.PREFIJOS[lote.Tipo_Semilla]||'OT';
@@ -880,7 +874,6 @@ async function crearLote(lote){
   return lote;
 }
 
-/* ---------- DIVISIÓN DE LOTES (ej. separar semilla / consumo) ---------- */
 async function dividirLote(payload){
   if(S.online){
     const r = await API.post(Object.assign({action:'dividirLote'},payload));
@@ -1244,7 +1237,12 @@ function renderDashboard(c){
   const germPend = germinacionesPendientes();
   const porTipo = stockPorTipo();
   const maxTipo = Math.max(1,...Object.values(porTipo));
-  const custodiaKg = (S.DB.custodia||[]).filter(r=>r.Estado==='En custodia').reduce((s,r)=>s+num(r.Cantidad_Actual_kg),0);
+
+  /* --- KPI de custodia en SACOS (modificado) --- */
+  const custodiaSacos = (S.DB.custodia||[]).filter(r=>r.Estado==='En custodia').reduce((s,r)=>{
+    const sacos = num(r.Cantidad_Sacos_Actual) || round2(num(r.Cantidad_Actual_kg) / (num(r.Peso_Por_Saco_kg)||50));
+    return s + sacos;
+  }, 0);
 
   const alertas=[];
   cuarentena.forEach(l=>alertas.push({tipo:'warn',tit:`Lote ${l.ID_Lote} en cuarentena`,sub:`${l.Tipo_Semilla} · ${l.Variedad||'—'} · ${fmtCantidadLote(l)}`}));
@@ -1260,7 +1258,7 @@ function renderDashboard(c){
       ${kpi('En cuarentena',cuarentena.length,'alerttriangle','var(--warn)')}
       ${kpi('Notas este mes',notasMes,'filetext','var(--otra)')}
       ${kpi('Despachado este mes','<span class="mono">'+fmtKg(kgDespachadosMes)+'</span> <small>kg</small>','truck','var(--caraota)')}
-      ${kpi('En custodia de terceros','<span class="mono">'+fmtKg(custodiaKg)+'</span> <small>kg</small>','lock','var(--otra)')}
+      ${kpi('En custodia de terceros', '<span class="mono">'+fmtKg(custodiaSacos)+'</span> <small>sacos</small>', 'lock', 'var(--otra)')}
     </div>
     <div class="card" style="margin-bottom:22px">
       <div class="card-head">
@@ -1355,12 +1353,17 @@ function renderCustodiaView(c){
 
   const activos=(S.DB.custodia||[]).filter(r=>r.Estado==='En custodia');
   const kgTotal=activos.reduce((s,r)=>s+num(r.Cantidad_Actual_kg),0);
+  /* Total de sacos en custodia (calculado) */
+  const sacosTotal = activos.reduce((s,r)=>{
+    const sacos = num(r.Cantidad_Sacos_Actual) || round2(num(r.Cantidad_Actual_kg) / (num(r.Peso_Por_Saco_kg)||50));
+    return s + sacos;
+  }, 0);
   const depositantes=new Set(activos.map(r=>r.Depositante)).size;
 
   c.innerHTML=`
     <div class="mini-note" style="margin-bottom:18px">${ic('lock')} Semilla que <b>no es propiedad del almacén</b> — la guardas para terceros como servicio de almacenamiento. No afecta tu stock propio ni las notas de salida.</div>
     <div class="kpi-row" style="display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:14px;margin-bottom:20px">
-      ${kpi('Kg en custodia (activo)',fmtKg(kgTotal)+' kg','lock','var(--otra)')}
+      ${kpi('Sacos en custodia (activo)',fmtKg(sacosTotal)+' sacos','lock','var(--otra)')}
       ${kpi('Depositantes activos',depositantes,'users','var(--maiz-lt)')}
       ${kpi('Registros totales',(S.DB.custodia||[]).length,'clipboardcheck','var(--soya)')}
     </div>
@@ -1571,7 +1574,7 @@ function imprimirComprobanteCustodia(r){
   :root{--banda:#16281F;--oro:#F2B341;--oroDk:#B45309;--crema:#F6F3E9;--texto:#1B1E14;--mute:#6B7280;--linea:#E7E5DC;}
   *{box-sizing:border-box}
   body{font-family:'IBM Plex Sans',Arial,sans-serif;color:var(--texto);margin:0;padding:0;background:#EDEDE5}
-  .sheet{max-width:640px;margin:26px auto;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.12);border-radius:6px;overflow:hidden}
+  .sheet{max-width:640px;margin:26px auto;background:#fff;box-shadow:0 10px 40px rgba(0,0,0,.12);overflow:hidden;border-radius:6px}
   .banda{background:linear-gradient(135deg,#1D3327,var(--banda) 65%);color:#fff;padding:26px 36px 22px;display:flex;justify-content:space-between;align-items:flex-start}
   .brand{display:flex;align-items:center;gap:13px}
   .logo{width:44px;height:44px;border-radius:12px;background:linear-gradient(155deg,var(--oro),var(--oroDk));display:flex;align-items:center;justify-content:center;font-family:'Space Grotesk',sans-serif;font-weight:700;font-size:19px;color:#241900}
