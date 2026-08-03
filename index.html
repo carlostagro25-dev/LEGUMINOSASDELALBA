@@ -445,7 +445,7 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
    =================================================================== */
 /* ======================= CONFIGURACIÓN ======================= */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbzoXXRn-r0M4BdeCiuCWdsAERXrZNYP__uoVSAD6WREne8Jl_iCHmDTG9R2EsKbrL4J/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
+  API_URL: 'https://script.google.com/macros/s/AKfycbxz5-S8U_5NeVYlQl-4C-ICiCsvtO_aeRVDW9qTDKNW-D9xmyWl-mx7C6VO4ZTsJB0D/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
   ALMACEN_NOMBRE: 'Almacén Leguminosas del Alba',
   GERMINACION_UMBRAL_APTO: 80,
   GERMINACION_DIAS_PROXIMA: 30,
@@ -994,6 +994,36 @@ async function retiroCustodia(payload){
   return true;
 }
 
+/* ===== NUEVA FUNCIÓN: ELIMINAR CUSTODIA ===== */
+async function eliminarCustodia(id) {
+  if (!isAdmin()) {
+    toast('Solo el Administrador puede eliminar registros de custodia.', true);
+    return false;
+  }
+  if (!confirm('¿Estás seguro de eliminar el registro de custodia ' + id + '?\nEsta acción no se puede deshacer.')) {
+    return false;
+  }
+  if (S.online) {
+    const r = await API.post({ action: 'eliminarCustodia', idCustodia: id });
+    if (r && r.ok) {
+      S.DB.custodia = S.DB.custodia.filter(c => c.ID_Custodia !== id);
+      S.DB.custodiaMovimientos = S.DB.custodiaMovimientos.filter(m => m.ID_Custodia !== id);
+      toast('Registro eliminado correctamente');
+      renderView();
+      return true;
+    } else {
+      toast(r && r.error ? r.error : 'No se pudo eliminar el registro', true);
+      return false;
+    }
+  } else {
+    S.DB.custodia = S.DB.custodia.filter(c => c.ID_Custodia !== id);
+    S.DB.custodiaMovimientos = S.DB.custodiaMovimientos.filter(m => m.ID_Custodia !== id);
+    toast('Registro eliminado localmente (no se sincronizó con el servidor)');
+    renderView();
+    return true;
+  }
+}
+
 /* ---------- MOVIMIENTOS (ajuste / devolución / entrada extra) ---------- */
 async function registrarMovimiento(mov){
   if(S.online){
@@ -1373,6 +1403,7 @@ function renderCustodiaView(c){
         ${estados.map(e=>`<option value="${esc(e)}" ${S.sub.custFiltroEstado===e?'selected':''}>${e==='Todos'?'Todos los estados':e}</option>`).join('')}
       </select>
       <div class="spacer"></div>
+      <button class="btn btn-outline" id="syncCustodia">${ic('refresh')} Sincronizar</button>
       ${canWrite()?`<button class="btn btn-primary" id="btnNuevaCustodia">${ic('plus')} Nuevo ingreso</button>`:''}
     </div>
     <div class="card">
@@ -1396,6 +1427,13 @@ function renderCustodiaView(c){
   $('#buscarCustodia').oninput=debounce(e=>{ S.sub.custBusqueda=e.target.value; renderView(); const inp=$('#buscarCustodia'); if(inp) setCaretEnd(inp); },260);
   $$('tr.row-link').forEach(tr=>tr.onclick=()=>abrirDetalleCustodia(tr.dataset.id));
   if($('#btnNuevaCustodia')) $('#btnNuevaCustodia').onclick=()=>abrirModalNuevaCustodia();
+  if($('#syncCustodia')) {
+    $('#syncCustodia').onclick = async () => {
+      await API.bootstrap();
+      toast('Datos sincronizados con el servidor');
+      renderView();
+    };
+  }
 }
 
 function abrirModalNuevaCustodia(){
@@ -1472,12 +1510,19 @@ function abrirDetalleCustodia(id){
       <button class="btn btn-outline" id="custComprobante">${ic('printer')} Imprimir comprobante</button>
       ${canWrite()?`<button class="btn btn-ghost" id="custEntrada">${ic('plus')} Agregar entrada</button>`:''}
       ${canWrite()&&r.Estado==='En custodia'?`<button class="btn btn-ghost" id="custRetirar">${ic('shuffle')} Registrar retiro</button>`:''}
+      ${isAdmin()?`<button class="btn btn-danger" id="custEliminar">${ic('trash')} Eliminar registro</button>`:''}
       <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
     </div>`;
   openModal(html,{wide:true});
   $('#custComprobante').onclick=()=>imprimirComprobanteCustodia(r);
   if($('#custEntrada')) $('#custEntrada').onclick=()=>{ closeModal(); abrirModalEntradaAdicionalCustodia(r.ID_Custodia); };
   if($('#custRetirar')) $('#custRetirar').onclick=()=>{ closeModal(); abrirModalRetiroCustodia(r.ID_Custodia); };
+  if($('#custEliminar')){
+    $('#custEliminar').onclick = async () => {
+      const ok = await eliminarCustodia(r.ID_Custodia);
+      if (ok) closeModal();
+    };
+  }
 }
 
 /* ======================= ENTRADA ADICIONAL A UN REGISTRO DE CUSTODIA EXISTENTE ======================= */
