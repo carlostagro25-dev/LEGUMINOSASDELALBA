@@ -445,7 +445,7 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
    =================================================================== */
 /* ======================= CONFIGURACIÓN ======================= */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxz5-S8U_5NeVYlQl-4C-ICiCsvtO_aeRVDW9qTDKNW-D9xmyWl-mx7C6VO4ZTsJB0D/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
+  API_URL: 'https://script.google.com/macros/s/AKfycbxXWwOcCAmW5gdGir1_iZpEOFvutwlnmZhWFxB1PGDLZWeAkd7_ZdDs3zX3hZDXntz5/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
   ALMACEN_NOMBRE: 'Almacén Leguminosas del Alba',
   GERMINACION_UMBRAL_APTO: 80,
   GERMINACION_DIAS_PROXIMA: 30,
@@ -1022,6 +1022,74 @@ async function eliminarCustodia(id) {
     renderView();
     return true;
   }
+}
+
+/* ===== ELIMINAR LOTE (borra la fila en Sheets + movimientos/secado/germinación asociados) ===== */
+async function eliminarLote(idLote) {
+  if (!isAdmin()) { toast('Solo el Administrador puede eliminar lotes.', true); return false; }
+  if (!confirm('¿Estás seguro de eliminar el lote ' + idLote + '?\nSe borrarán también sus movimientos, secados y pruebas de germinación.\nEsta acción no se puede deshacer.')) return false;
+  if (!S.online) { toast('Sin conexión al servidor — no se puede eliminar en modo demo', true); return false; }
+  const r = await API.post({ action: 'eliminarLote', idLote: idLote, usuario: S.user.Email });
+  if (r && r.ok) {
+    S.DB.lotes = S.DB.lotes.filter(l => l.ID_Lote !== idLote);
+    S.DB.movimientos = S.DB.movimientos.filter(m => m.ID_Lote !== idLote);
+    S.DB.secado = S.DB.secado.filter(s => s.ID_Lote !== idLote);
+    S.DB.germinacion = S.DB.germinacion.filter(g => g.ID_Lote !== idLote);
+    toast('Lote eliminado correctamente');
+    renderView();
+    return true;
+  }
+  toast(r && r.error ? r.error : 'No se pudo eliminar el lote', true);
+  return false;
+}
+
+/* ===== ELIMINAR MOVIMIENTO (borra la fila en Sheets) ===== */
+async function eliminarMovimiento(idMovimiento) {
+  if (!isAdmin()) { toast('Solo el Administrador puede eliminar movimientos.', true); return false; }
+  if (!confirm('¿Estás seguro de eliminar este movimiento?\nEsta acción no se puede deshacer.')) return false;
+  if (!S.online) { toast('Sin conexión al servidor — no se puede eliminar en modo demo', true); return false; }
+  const r = await API.post({ action: 'eliminarMovimiento', idMovimiento: idMovimiento, usuario: S.user.Email });
+  if (r && r.ok) {
+    S.DB.movimientos = S.DB.movimientos.filter(m => m.ID_Movimiento !== idMovimiento);
+    toast('Movimiento eliminado correctamente');
+    renderView();
+    return true;
+  }
+  toast(r && r.error ? r.error : 'No se pudo eliminar el movimiento', true);
+  return false;
+}
+
+/* ===== ELIMINAR NOTA (solo si ya está Anulada — borra la fila en Sheets + su detalle) ===== */
+async function eliminarNota(idNota) {
+  if (!isAdmin()) { toast('Solo el Administrador puede eliminar notas.', true); return false; }
+  if (!confirm('¿Estás seguro de eliminar permanentemente la nota ' + idNota + '?\nEsta acción no se puede deshacer.')) return false;
+  if (!S.online) { toast('Sin conexión al servidor — no se puede eliminar en modo demo', true); return false; }
+  const r = await API.post({ action: 'eliminarNota', idNota: idNota, usuario: S.user.Email });
+  if (r && r.ok) {
+    S.DB.notas = S.DB.notas.filter(n => n.ID_Nota !== idNota);
+    S.DB.detalle = S.DB.detalle.filter(d => d.ID_Nota !== idNota);
+    toast('Nota eliminada correctamente');
+    renderView();
+    return true;
+  }
+  toast(r && r.error ? r.error : 'No se pudo eliminar la nota', true);
+  return false;
+}
+
+/* ===== ELIMINAR USUARIO (borra la fila en Sheets) ===== */
+async function eliminarUsuario(email) {
+  if (!isAdmin()) { toast('Solo el Administrador puede eliminar usuarios.', true); return false; }
+  if (!confirm('¿Estás seguro de eliminar al usuario ' + email + '?\nEsta acción no se puede deshacer.')) return false;
+  if (!S.online) { toast('Sin conexión al servidor — no se puede eliminar en modo demo', true); return false; }
+  const r = await API.post({ action: 'eliminarUsuario', email: email, usuario: S.user.Email });
+  if (r && r.ok) {
+    S.DB.usuarios = S.DB.usuarios.filter(u => u.Email !== email);
+    toast('Usuario eliminado correctamente');
+    renderView();
+    return true;
+  }
+  toast(r && r.error ? r.error : 'No se pudo eliminar el usuario', true);
+  return false;
 }
 
 /* ---------- MOVIMIENTOS (ajuste / devolución / entrada extra) ---------- */
@@ -1918,6 +1986,7 @@ function abrirPasaporte(id){
       ${canWrite()?`<button class="btn btn-ghost" id="ppGerm">${ic('sprout')} Registrar germinación</button>`:''}
       ${canWrite()&&num(lote.Stock_Actual_kg)>0?`<button class="btn btn-ghost" id="ppDividir">${ic('shuffle')} Dividir lote</button>`:''}
       ${canWrite()?`<button class="btn btn-ghost" id="ppAjuste">${ic('shuffle')} Ajuste / devolución</button>`:''}
+      ${isAdmin()?`<button class="btn btn-danger" id="ppEliminar">${ic('trash')} Eliminar lote</button>`:''}
       <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
     </div>`;
   openModal(html,{wide:true});
@@ -1927,6 +1996,7 @@ function abrirPasaporte(id){
   if($('#ppGerm')) $('#ppGerm').onclick=()=>{ closeModal(); abrirModalGerminacion(lote.ID_Lote); };
   if($('#ppDividir')) $('#ppDividir').onclick=()=>{ closeModal(); abrirModalDividirLote(lote.ID_Lote); };
   if($('#ppAjuste')) $('#ppAjuste').onclick=()=>{ closeModal(); abrirModalAjuste(lote.ID_Lote); };
+  if($('#ppEliminar')) $('#ppEliminar').onclick=async()=>{ const ok=await eliminarLote(lote.ID_Lote); if(ok) closeModal(); };
 }
 
 /* ======================= ENTRADA ADICIONAL A UN LOTE EXISTENTE ======================= */
@@ -2366,9 +2436,11 @@ function renderMovimientos(c){
     <div class="card">
       <div class="tbl-wrap">
       ${movs.length?`<table class="tbl"><thead><tr>
-        <th>Fecha</th><th>Lote</th><th>Semilla</th><th>Tipo</th><th class="num">Cantidad</th><th>Motivo</th><th>Usuario</th>
+        <th>Fecha</th><th>Lote</th><th>Semilla</th><th>Tipo</th><th class="num">Cantidad</th><th>Motivo</th><th>Usuario</th>${isAdmin()?'<th></th>':''}
       </tr></thead><tbody>
-      ${movs.map(m=>{ const l=loteById(m.ID_Lote); const pos=num(m.Cantidad_kg)>=0; return `<tr>
+      ${movs.map(m=>{ const l=loteById(m.ID_Lote); const pos=num(m.Cantidad_kg)>=0;
+        const esSalidaDeNota = m.Tipo_Movimiento==='Salida' && m.ID_Nota;
+        return `<tr>
         <td>${fmtDT(m.Fecha)}</td>
         <td class="idcode">${esc(m.ID_Lote)}</td>
         <td>${l?seedBadge(l.Tipo_Semilla):'—'}</td>
@@ -2376,6 +2448,7 @@ function renderMovimientos(c){
         <td class="num" style="color:${pos?'var(--ok)':'var(--bad)'};font-family:var(--fmono);font-weight:600">${pos?'+':''}${l?fmtCantidadKg(l,m.Cantidad_kg):fmtKg(m.Cantidad_kg)+' kg'}</td>
         <td>${esc(m.Motivo||'—')}${m.ID_Nota?' · '+esc(m.ID_Nota):''}</td>
         <td>${esc(m.Usuario||'—')}</td>
+        ${isAdmin()?`<td>${esSalidaDeNota?'':`<button class="btn btn-ghost btn-sm" data-mov="${esc(m.ID_Movimiento)}" title="Eliminar movimiento">${ic('trash')}</button>`}</td>`:''}
       </tr>`; }).join('')}
       </tbody></table>`:`<div class="empty-state">${ic('shuffle','ic-lg')}<b>Sin movimientos</b>Ajusta los filtros o registra un movimiento.</div>`}
       </div>
@@ -2383,6 +2456,7 @@ function renderMovimientos(c){
   $$('#chipsMov .chip-filter',c).forEach(ch=>ch.onclick=()=>{ S.sub.filtroMov=ch.dataset.t; renderView(); });
   $('#buscarMov').oninput=debounce(e=>{ S.sub.buscaMov=e.target.value; renderView(); const inp=$('#buscarMov'); if(inp) setCaretEnd(inp); },260);
   if($('#btnAjuste')) $('#btnAjuste').onclick=()=>abrirModalAjuste();
+  $$('[data-mov]',c).forEach(b=>b.onclick=()=>eliminarMovimiento(b.dataset.mov));
 }
 
 function abrirModalAjuste(loteId){
@@ -2525,10 +2599,12 @@ function abrirDetalleNota(idNota){
       ${nota.PDF_Link?`<a class="btn btn-outline" href="${esc(nota.PDF_Link)}" target="_blank" rel="noopener">${ic('download')} Abrir PDF de respaldo</a>`:''}
       <button class="btn btn-outline" id="btnImprimirNota">${ic('printer')} Vista previa / imprimir</button>
       ${isAdmin()&&nota.Estado==='Emitida'?`<button class="btn btn-ghost" id="btnAnular" style="color:var(--bad)">${ic('ban')} Anular nota</button>`:''}
+      ${isAdmin()&&nota.Estado==='Anulada'?`<button class="btn btn-danger" id="btnEliminarNota">${ic('trash')} Eliminar permanentemente</button>`:''}
       <button class="btn btn-outline" onclick="closeModal()">Cerrar</button>
     </div>`;
   openModal(html,{wide:true});
   if($('#btnImprimirNota')) $('#btnImprimirNota').onclick=()=>imprimirNota(nota,lineas,t);
+  if($('#btnEliminarNota')) $('#btnEliminarNota').onclick=async()=>{ const ok=await eliminarNota(nota.ID_Nota); if(ok) closeModal(); };
   if($('#btnAnular')) $('#btnAnular').onclick=()=>{
     $('#anularBox').innerHTML=`<div class="mini-note" style="margin-top:14px;border-color:var(--bad)">
       <div style="margin-bottom:10px">${ic('alerttriangle')} Esta acción revierte el stock despachado a los lotes. Indica el motivo:</div>
@@ -3102,8 +3178,11 @@ function abrirModalUsuario(email){
       </div>
       ${existente?`<div class="field-check"><input type="checkbox" id="usActivo" ${existente.Activo!=='No'?'checked':''}><label style="margin:0;text-transform:none;font-weight:500;color:var(--texto)">Usuario activo</label></div>`:''}
     </div>
-    <div class="modal-foot"><button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="usGuardar">${ic('checkcircle')} Guardar</button></div>`;
+    <div class="modal-foot">
+      ${existente&&existente.Email!==S.user.Email?`<button class="btn btn-danger" id="usEliminar">${ic('trash')} Eliminar usuario</button>`:''}
+      <button class="btn btn-outline" onclick="closeModal()">Cancelar</button><button class="btn btn-primary" id="usGuardar">${ic('checkcircle')} Guardar</button></div>`;
   openModal(html);
+  if($('#usEliminar')) $('#usEliminar').onclick=async()=>{ const ok=await eliminarUsuario(existente.Email); if(ok) closeModal(); };
   $('#usGuardar').onclick=async()=>{
     const nombre=$('#usNombre').value.trim(), email=$('#usEmail').value.trim(), rol=$('#usRol').value, pass=$('#usPass').value;
     if(!nombre||!email){ toast('Indica nombre y correo',true); return; }
