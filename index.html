@@ -445,7 +445,7 @@ table.tbl .idcode{font-family:var(--fmono);font-size:12.3px;color:var(--mute)}
    =================================================================== */
 /* ======================= CONFIGURACIÓN ======================= */
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbxXWwOcCAmW5gdGir1_iZpEOFvutwlnmZhWFxB1PGDLZWeAkd7_ZdDs3zX3hZDXntz5/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
+  API_URL: 'https://script.google.com/macros/s/AKfycbyonaAATkRw37IVnxpeKyDTrOuVY4T9HMxnZPnV6w04hHj4OI3tujQ7zf_-mVXD142F/exec',   // pega aquí la URL /exec de tu Apps Script. Vacío = modo demo local.
   ALMACEN_NOMBRE: 'Almacén Leguminosas del Alba',
   GERMINACION_UMBRAL_APTO: 80,
   GERMINACION_DIAS_PROXIMA: 30,
@@ -696,8 +696,8 @@ const SEED = {
     {ID_Prueba:'GER-000003',ID_Lote:'SY-2026-0001',Fecha_Prueba:'2026-06-18',Semillas_Probadas:100,Semillas_Germinadas:64,Porcentaje_Germinacion:64,Resultado:'Solo Consumo',Proxima_Prueba:'2026-07-18',Registrado_Por:'operador2@alba.com',Observaciones:'Por debajo del umbral, reclasificado'},
   ],
   notas:[
-    {ID_Nota:'SAL-2026-0001',Fecha:'2026-07-01 14:20',Nombre_Receptor:'Pedro Ramírez',Cedula_Receptor:'V-12.345.678',Telefono_Receptor:'0414-1234567',Entregado_Por:'Juan Pérez',Autorizado_Por:'Rafael Mendoza',Plan:'FINAGRO Maíz',Estado:'Emitida',PDF_Link:'',Usuario_Registro:'operador1@alba.com',Observaciones:'Entrega de semilla certificada'},
-    {ID_Nota:'SAL-2026-0002',Fecha:'2026-07-03 15:05',Nombre_Receptor:'Ana Torres',Cedula_Receptor:'V-15.902.331',Telefono_Receptor:'0416-9988771',Entregado_Por:'Ysabel Rondón',Autorizado_Por:'Rafael Mendoza',Plan:'General',Estado:'Emitida',PDF_Link:'',Usuario_Registro:'operador2@alba.com',Observaciones:''},
+    {ID_Nota:'SAL-2026-0001',Fecha:'2026-07-01 14:20',Nombre_Receptor:'Pedro Ramírez',Cedula_Receptor:'V-12.345.678',Solicitado_Por:'Pedro Ramírez',Placa_Vehiculo:'AB123CD',Tipo_Vehiculo:'Camión 350',Entregado_Por:'Juan Pérez',Autorizado_Por:'Rafael Mendoza',Plan:'FINAGRO Maíz',Estado:'Emitida',PDF_Link:'',Usuario_Registro:'operador1@alba.com',Observaciones:'Entrega de semilla certificada'},
+    {ID_Nota:'SAL-2026-0002',Fecha:'2026-07-03 15:05',Nombre_Receptor:'Ana Torres',Cedula_Receptor:'V-15.902.331',Solicitado_Por:'Ana Torres',Placa_Vehiculo:'XY987ZT',Tipo_Vehiculo:'Camioneta',Entregado_Por:'Ysabel Rondón',Autorizado_Por:'Rafael Mendoza',Plan:'General',Estado:'Emitida',PDF_Link:'',Usuario_Registro:'operador2@alba.com',Observaciones:''},
   ],
   detalle:[
     {ID_Detalle:'DET-000001',ID_Nota:'SAL-2026-0001',ID_Lote:'MZ-2026-0001',Tipo_Semilla:'Maíz',Variedad_Hibrido:'DK-410',Cantidad_kg:800,Cantidad_Sacos:16},
@@ -2151,8 +2151,11 @@ function notaQRText(nota,t){
   L.push('Nota de salida: '+nota.ID_Nota);
   L.push('Fecha: '+fmtDT(nota.Fecha));
   L.push('Receptor: '+nota.Nombre_Receptor+(nota.Cedula_Receptor?' · C.I. '+nota.Cedula_Receptor:''));
+  if(nota.Solicitado_Por) L.push('Solicitó: '+nota.Solicitado_Por);
   if(nota.Entregado_Por) L.push('Entregó: '+nota.Entregado_Por);
   if(nota.Autorizado_Por) L.push('Autorizó: '+nota.Autorizado_Por);
+  if(nota.Placa_Vehiculo) L.push('Placa: '+nota.Placa_Vehiculo);
+  if(nota.Tipo_Vehiculo) L.push('Vehículo: '+nota.Tipo_Vehiculo);
   L.push('Plan: '+(nota.Plan||'General'));
   L.push('Total despachado: '+fmtKg(t.kg)+' kg ('+t.sacos+' sacos, '+t.n+' producto(s))');
   L.push('Estado: '+nota.Estado);
@@ -2587,7 +2590,14 @@ function abrirDetalleNota(idNota){
         <div class="field"><label>Entregado por</label><div style="padding:10px 0;font-size:14px;color:var(--texto)">${esc(nota.Entregado_Por||'—')}</div></div>
         <div class="field"><label>Autorizado por</label><div style="padding:10px 0;font-size:14px;color:var(--texto)">${esc(nota.Autorizado_Por||'—')}</div></div>
       </div>
-      <div class="field"><label>Plan</label><div style="padding:2px 0"><span class="st-badge info">${esc(nota.Plan||'General')}</span></div></div>
+      <div class="grid2">
+        <div class="field"><label>Solicitado por</label><div style="padding:10px 0;font-size:14px;color:var(--texto)">${esc(nota.Solicitado_Por||'—')}</div></div>
+        <div class="field"><label>Plan</label><div style="padding:10px 0"><span class="st-badge info">${esc(nota.Plan||'General')}</span></div></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Placa del vehículo</label><div style="padding:10px 0;font-size:14px;color:var(--texto)">${esc(nota.Placa_Vehiculo||'—')}</div></div>
+        <div class="field"><label>Tipo de vehículo</label><div style="padding:10px 0;font-size:14px;color:var(--texto)">${esc(nota.Tipo_Vehiculo||'—')}</div></div>
+      </div>
       <div class="section-title">Productos despachados</div>
       <div class="tbl-wrap"><table class="tbl"><thead><tr><th>Lote</th><th>Semilla</th><th>Variedad/Híbrido</th><th class="num">Cantidad</th></tr></thead><tbody>
       ${lineas.map(d=>`<tr><td class="idcode">${esc(d.ID_Lote)}</td><td>${seedBadge(d.Tipo_Semilla)}</td><td>${esc(d.Variedad_Hibrido||'—')}</td><td class="num">${fmtCantidadTipo(d.Tipo_Semilla,d.Cantidad_kg,d.Cantidad_Sacos)}</td></tr>`).join('')}
@@ -2717,13 +2727,15 @@ function imprimirNota(nota,lineas,t){
         <div class="ct">Receptor</div>
         <div class="kv"><span>Nombre</span><b>${esc(nota.Nombre_Receptor)}</b></div>
         <div class="kv"><span>Cédula</span><b>${esc(nota.Cedula_Receptor||'—')}</b></div>
-        <div class="kv"><span>Teléfono</span><b>${esc(nota.Telefono_Receptor||'—')}</b></div>
+        <div class="kv"><span>Solicitado por</span><b>${esc(nota.Solicitado_Por||'—')}</b></div>
       </div>
       <div class="card">
         <div class="ct">Despacho</div>
         <div class="kv"><span>Entregó</span><b>${esc(nota.Entregado_Por||'—')}</b></div>
         <div class="kv"><span>Autorizó</span><b>${esc(nota.Autorizado_Por||'—')}</b></div>
         <div class="kv"><span>Plan</span><b>${esc(nota.Plan||'General')}</b></div>
+        <div class="kv"><span>Placa del vehículo</span><b>${esc(nota.Placa_Vehiculo||'—')}</b></div>
+        <div class="kv"><span>Tipo de vehículo</span><b>${esc(nota.Tipo_Vehiculo||'—')}</b></div>
         <div class="kv"><span>Productos</span><b>${t.n} lote(s)</b></div>
       </div>
     </div>
@@ -2766,8 +2778,12 @@ function abrirModalNuevaNota(){
         <div class="field"><label>Cédula</label><input id="nnCedula" placeholder="V-00.000.000"></div>
       </div>
       <div class="grid2">
-        <div class="field"><label>Teléfono</label><input id="nnTelefono" placeholder="Opcional"></div>
         <div class="field"><label>Autorizado por</label><input id="nnAutoriza" placeholder="Nombre de quien autoriza"></div>
+        <div class="field"><label>Solicitado por</label><input id="nnSolicita" placeholder="Nombre de quien solicita"></div>
+      </div>
+      <div class="grid2">
+        <div class="field"><label>Placa del vehículo</label><input id="nnPlaca" placeholder="Ej. AB123CD"></div>
+        <div class="field"><label>Tipo de vehículo</label><input id="nnTipoVehiculo" placeholder="Ej. Camión 350"></div>
       </div>
       <div class="grid2">
         <div class="field"><label>Entregado por</label><input id="nnEntrega" value="${esc(S.user.Nombre||S.user.Email)}"></div>
@@ -2843,7 +2859,8 @@ function abrirModalNuevaNota(){
       if(lote && kgPorLote[id]>num(lote.Stock_Actual_kg)+0.001){ toast(`El lote ${id} no tiene ${fmtCantidadKg(lote,kgPorLote[id])} disponibles (stock: ${fmtCantidadLote(lote)})`,true); return; }
     }
     const nota={
-      Nombre_Receptor:nombre, Cedula_Receptor:$('#nnCedula').value.trim(), Telefono_Receptor:$('#nnTelefono').value.trim(),
+      Nombre_Receptor:nombre, Cedula_Receptor:$('#nnCedula').value.trim(),
+      Placa_Vehiculo:$('#nnPlaca').value.trim(), Tipo_Vehiculo:$('#nnTipoVehiculo').value.trim(), Solicitado_Por:$('#nnSolicita').value.trim(),
       Entregado_Por:$('#nnEntrega').value.trim(), Autorizado_Por:$('#nnAutoriza').value.trim(), Plan:$('#nnPlan').value,
       Usuario_Registro:S.user.Email, Observaciones:$('#nnObs').value.trim()
     };
